@@ -170,7 +170,7 @@ fun MainScreen(
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Image(
-                        painter = painterResource(id = R.mipmap.ic_launcher_round),
+                        painter = painterResource(id = R.drawable.bunker_logo),
                         contentDescription = "Bunker Cat Logo",
                         modifier = Modifier
                             .size(42.dp)
@@ -196,7 +196,7 @@ fun MainScreen(
                                     .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
                                 Text(
-                                    text = "v1.2",
+                                    text = "v1.2.1",
                                     color = BunkerBg,
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,

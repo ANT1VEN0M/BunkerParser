@@ -4,11 +4,19 @@ import android.app.Application
 import com.bunker.parser.core.CoreNativeManager
 
 class BunkerParserApp : Application() {
+    companion object {
+        lateinit var instance: BunkerParserApp
+            private set
+    }
+
     override fun onCreate() {
         super.onCreate()
-        try {
-            CoreNativeManager.initCoreEnv(this)
-        } catch (_: Throwable) {
-        }
+        instance = this
+        Thread {
+            try {
+                CoreNativeManager.initCoreEnv(this)
+            } catch (_: Throwable) {
+            }
+        }.start()
     }
 }
