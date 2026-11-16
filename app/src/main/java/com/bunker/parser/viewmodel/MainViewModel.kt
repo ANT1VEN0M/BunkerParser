@@ -202,6 +202,22 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         checkEngine.stop()
     }
 
+    fun pauseChecking() {
+        checkEngine.pause()
+    }
+
+    fun resumeChecking() {
+        checkEngine.resume()
+    }
+
+    fun togglePauseResume() {
+        if (checkEngine.isPaused()) {
+            checkEngine.resume()
+        } else if (checkEngine.isRunning()) {
+            checkEngine.pause()
+        }
+    }
+
     fun copyResultsToClipboard() {
         val alive = results.value
         if (alive.isEmpty()) {

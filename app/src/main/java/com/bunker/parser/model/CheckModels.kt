@@ -36,5 +36,6 @@ data class CheckerStats(
     val dead: Int = 0,
     val ratePerSec: Float = 0f,
     val isRunning: Boolean = false,
+    val isPaused: Boolean = false,
     val currentBatch: String = ""
 )

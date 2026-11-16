@@ -25,17 +25,34 @@ class CheckEngine {
     val results: StateFlow<List<CheckResult>> = _results.asStateFlow()
 
     private val isRunningFlag = AtomicBoolean(false)
+    private val isPausedFlag = AtomicBoolean(false)
     private var engineJob: Job? = null
 
     // DNS Cache to eliminate repeated DNS queries across thousands of nodes
     private val dnsCache = ConcurrentHashMap<String, InetAddress?>()
 
     fun isRunning(): Boolean = isRunningFlag.get()
+    fun isPaused(): Boolean = isPausedFlag.get()
+
+    fun pause() {
+        if (isRunningFlag.get()) {
+            isPausedFlag.set(true)
+            _stats.value = _stats.value.copy(isPaused = true)
+        }
+    }
+
+    fun resume() {
+        if (isRunningFlag.get()) {
+            isPausedFlag.set(false)
+            _stats.value = _stats.value.copy(isPaused = false)
+        }
+    }
 
     fun stop() {
         isRunningFlag.set(false)
+        isPausedFlag.set(false)
         engineJob?.cancel()
-        _stats.value = _stats.value.copy(isRunning = false)
+        _stats.value = _stats.value.copy(isRunning = false, isPaused = false)
     }
 
     private fun resolveHostSafely(host: String): InetAddress? {
@@ -52,15 +69,19 @@ class CheckEngine {
     private fun probeTcpPing(host: String, port: Int, timeoutMs: Int): Long {
         val inetAddr = resolveHostSafely(host) ?: return -1L
         val started = System.currentTimeMillis()
+        var socket: Socket? = null
         return try {
-            Socket().use { socket ->
-                socket.tcpNoDelay = true
-                socket.soTimeout = timeoutMs
-                socket.connect(InetSocketAddress(inetAddr, port), timeoutMs)
-                System.currentTimeMillis() - started
-            }
+            socket = Socket()
+            socket.reuseAddress = true
+            socket.tcpNoDelay = true
+            // Immediately reclaim file descriptors upon close, preventing TIME_WAIT exhaustion in kernel
+            socket.setSoLinger(true, 0)
+            socket.connect(InetSocketAddress(inetAddr, port), timeoutMs)
+            System.currentTimeMillis() - started
         } catch (_: Throwable) {
             -1L
+        } finally {
+            try { socket?.close() } catch (_: Throwable) {}
         }
     }
 
@@ -75,6 +96,7 @@ class CheckEngine {
         stop()
 
         isRunningFlag.set(true)
+        isPausedFlag.set(false)
         val verifiedList = mutableListOf<CheckResult>()
         _results.value = emptyList()
 
@@ -93,6 +115,7 @@ class CheckEngine {
             dead = 0,
             ratePerSec = 0f,
             isRunning = true,
+            isPaused = false,
             currentBatch = "Старт Turbo проверки Xray Core ($workerPoolSize потоков)..."
         )
 
@@ -116,6 +139,13 @@ class CheckEngine {
                     for (item in channel) {
                         if (!isRunningFlag.get()) break
 
+                        // Pause gate: gently suspend if user clicked pause
+                        while (isPausedFlag.get()) {
+                            if (!isRunningFlag.get()) break
+                            delay(250)
+                        }
+                        if (!isRunningFlag.get()) break
+
                         val configJson = XrayConfigBuilder.buildConfig(item.rawUri)
                         var isAlive = false
                         var finalPing = 0L
@@ -123,7 +153,6 @@ class CheckEngine {
 
                         if (configJson != null) {
                             // ── ШАГ 1: Сверхбыстрый TCP pre-check (400ms) ──
-                            // Отсекает 95% мёртвых хостов практически мгновенно
                             val preTcp = probeTcpPing(item.host, item.port, 400)
                             if (preTcp > 0) {
                                 val pings = mutableListOf<Long>()
@@ -135,7 +164,6 @@ class CheckEngine {
                                 )
 
                                 if (ytPing > 0) {
-                                    // Узел 100% живой! Добавляем YT
                                     isAlive = true
                                     services.add("YT")
                                     pings.add(ytPing)
@@ -170,8 +198,7 @@ class CheckEngine {
                                     }
                                     finalPing = pings.average().toLong()
                                 } else {
-                                    // YouTube не ответил (возможно блок именно YouTube).
-                                    // Проверяем Cloudflare 204 и Telegram параллельно!
+                                    // YouTube не ответил. Проверяем Cloudflare 204 и Telegram параллельно!
                                     coroutineScope {
                                         val cfDef = async(Dispatchers.IO) {
                                             CoreNativeManager.measureOutboundDelay(configJson, "https://cp.cloudflare.com/generate_204")
@@ -191,7 +218,6 @@ class CheckEngine {
 
                                         if (cfPing > 0) {
                                             isAlive = true
-                                            // Cloudflare доступен! Параллельно опрашиваем ChatGPT и Gemini
                                             val gptDef = async(Dispatchers.IO) {
                                                 CoreNativeManager.measureOutboundDelay(configJson, "https://chatgpt.com/robots.txt")
                                             }
@@ -232,9 +258,6 @@ class CheckEngine {
                         }
 
                         // УСЛОВИЕ ПРОХОЖДЕНИЯ:
-                        // 1. Узел должен быть реально живым (isAlive)
-                        // 2. Должен иметь хотя бы 1 работающий сервис (services.isNotEmpty) — узлы которые "никуда не заходят" отсекаются!
-                        // 3. Количество работающих сервисов должно удовлетворять minServices (1, 2, 3 или 4)
                         val passesFilter = isAlive && services.isNotEmpty() && (
                             services.size >= minServices || (services.contains("TUNNEL") && minServices <= 1)
                         )
@@ -274,13 +297,22 @@ class CheckEngine {
                             dead = deadCounter.get(),
                             ratePerSec = rate,
                             isRunning = isRunningFlag.get(),
+                            isPaused = isPausedFlag.get(),
                             currentBatch = "${item.scheme.uppercase()} ${item.host}:${item.port}"
                         )
 
-                        // Throttled results list emission (every 1000ms) for ultra-smooth UI
+                        // Throttled results list emission:
+                        // Внимание: НЕ выполняем дорогостоящий UriParser.rename на всём списке в цикле!
+                        // Просто передаём снимок списка, сохраняя 100% плавность и высокую скорость после 1000 нод!
                         if (now - lastUiUpdateMs > 1000) {
                             lastUiUpdateMs = now
-                            publishFormattedResults(verifiedList, listLock, mode)
+                            val snapshot = synchronized(listLock) {
+                                verifiedList.sortedWith(
+                                    compareByDescending<CheckResult> { it.tags.size }
+                                        .thenBy { if (it.speedMs > 0) it.speedMs else Long.MAX_VALUE }
+                                )
+                            }
+                            _results.value = snapshot
                         }
                     }
                 }
@@ -292,8 +324,10 @@ class CheckEngine {
             publishFormattedResults(verifiedList, listLock, mode)
 
             isRunningFlag.set(false)
+            isPausedFlag.set(false)
             _stats.value = _stats.value.copy(
                 isRunning = false,
+                isPaused = false,
                 currentBatch = "Проверка завершена! Отобрано ${verifiedList.size} реальных рабочих узлов"
             )
         }
@@ -305,9 +339,6 @@ class CheckEngine {
         mode: ParseMode
     ) {
         val snapshot = synchronized(listLock) {
-            // Элитная сортировка:
-            // Сначала идут ноды с наибольшим количеством сервисов (4/4 -> 3 -> 2 -> 1),
-            // а внутри одной категории — самые быстрые по пингу!
             verifiedList.sortedWith(
                 compareByDescending<CheckResult> { it.tags.size }
                     .thenBy { if (it.speedMs > 0) it.speedMs else Long.MAX_VALUE }
@@ -337,8 +368,25 @@ class CheckEngine {
     fun exportSubscription(results: List<CheckResult>, mode: ParseMode): String {
         val sb = StringBuilder()
         mode.formatSubscriptionHeader().forEach { sb.append(it).append("\n") }
-        results.forEach { cr ->
-            sb.append(cr.finalUri).append("\n")
+        val totalAlive = results.size
+        results.forEachIndexed { idx, cr ->
+            val uriToExport = if (cr.finalUri.isNotBlank()) {
+                cr.finalUri
+            } else {
+                val numStr = if (totalAlive < 100) "#%02d".format(idx + 1) else "#%03d".format(idx + 1)
+                val place = if (cr.countryName.isNotEmpty() && cr.countryName != "Планета 🌐") {
+                    "${cr.countryName} ${cr.flag}".trim()
+                } else if (cr.flag.isNotEmpty() && cr.flag != "🌐") {
+                    cr.flag
+                } else {
+                    "Планета 🌐"
+                }
+                val svcStr = if (cr.tags.isNotEmpty()) cr.tags.joinToString("×") else "ONLINE"
+                val pingStr = if (cr.speedMs > 0) "${cr.speedMs}ms" else "—ms"
+                val remark = "BUNKER ${mode.heart} | $place $numStr | $svcStr | $pingStr"
+                UriParser.rename(cr.item, remark)
+            }
+            sb.append(uriToExport).append("\n")
         }
         return sb.toString()
     }

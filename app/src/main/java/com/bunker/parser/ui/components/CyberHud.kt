@@ -20,6 +20,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.Cancel
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.DataUsage
+import androidx.compose.material.icons.filled.Storage
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -28,6 +36,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -62,6 +73,7 @@ fun CyberHud(
     )
 
     val (statusText, statusColor) = when {
+        stats.isPaused -> "ПАУЗА" to NeonAmber
         stats.isRunning -> "СКАНИРОВАНИЕ СЕТИ" to NeonCyan
         stats.total > 0 && stats.processed >= stats.total -> "ЗАВЕРШЕНО" to NeonGreen
         stats.total > 0 && !stats.isRunning -> "ОСТАНОВЛЕНО" to NeonAmber
@@ -74,9 +86,18 @@ fun CyberHud(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(BunkerSurface)
-            .border(1.dp, BunkerCardBorder, RoundedCornerShape(16.dp))
-            .padding(16.dp)
+            .background(Color(0xFF130D24))
+            .border(
+                1.2.dp,
+                Brush.verticalGradient(
+                    listOf(
+                        Color(0xFF7E22CE).copy(alpha = 0.7f),
+                        Color(0xFF3B1A66).copy(alpha = 0.5f)
+                    )
+                ),
+                RoundedCornerShape(16.dp)
+            )
+            .padding(14.dp)
     ) {
         Column {
             // Status bar header
@@ -86,12 +107,11 @@ fun CyberHud(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .size(10.dp)
-                            .clip(CircleShape)
-                            .background(statusColor)
-                            .then(if (stats.isRunning) Modifier.alpha(pulseAlpha) else Modifier)
+                    Icon(
+                        imageVector = Icons.Default.BarChart,
+                        contentDescription = null,
+                        tint = statusColor,
+                        modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
@@ -99,70 +119,104 @@ fun CyberHud(
                         color = statusColor,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.2.sp,
+                        letterSpacing = 1.sp,
                         fontFamily = FontFamily.Monospace
                     )
                 }
 
-                if (stats.isRunning && stats.ratePerSec > 0) {
-                    Text(
-                        text = String.format("%.1f nod/s", stats.ratePerSec),
-                        color = NeonCyan,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        fontFamily = FontFamily.Monospace
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (stats.isRunning && stats.ratePerSec > 0) {
+                        Text(
+                            text = String.format("%.1f nod/s", stats.ratePerSec),
+                            color = NeonCyan,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            fontFamily = FontFamily.Monospace,
+                            modifier = Modifier.padding(end = 8.dp)
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .background(statusColor)
+                            .then(if (stats.isRunning) Modifier.alpha(pulseAlpha) else Modifier)
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            HorizontalDivider(
+                color = BunkerCardBorder.copy(alpha = 0.5f),
+                modifier = Modifier.padding(vertical = 10.dp)
+            )
 
-            // Metrics Grid
+            // 4 Metrics Grid (Matching User Mockup)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                HudMetric(
+                HudMetricWithIcon(
                     label = "ВСЕГО",
-                    value = if (stats.total > 0) "${stats.processed}/${stats.total}" else "0",
-                    color = TextPrimary
+                    value = if (stats.total > 0) "${stats.processed}" else "0",
+                    icon = Icons.Default.Storage,
+                    iconColor = NeonPurple,
+                    valueColor = TextPrimary
                 )
-                HudMetric(
-                    label = "ЖИВЫЕ 🟢",
+                HudMetricWithIcon(
+                    label = "ЖИВЫЕ",
                     value = stats.alive.toString(),
-                    color = NeonGreen
+                    icon = Icons.Default.CheckCircle,
+                    iconColor = NeonGreen,
+                    valueColor = TextPrimary
                 )
-                HudMetric(
-                    label = "МЁРТВЫЕ 🔴",
+                HudMetricWithIcon(
+                    label = "МЁРТВЫЕ",
                     value = stats.dead.toString(),
-                    color = NeonRed
+                    icon = Icons.Default.Cancel,
+                    iconColor = NeonRed,
+                    valueColor = TextPrimary
                 )
-                HudMetric(
+                HudMetricWithIcon(
                     label = "ПРОГРЕСС",
                     value = "${(progressPercent * 100).toInt()}%",
-                    color = NeonPurple
+                    icon = Icons.Default.DataUsage,
+                    iconColor = NeonCyan,
+                    valueColor = TextPrimary
                 )
             }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // Progress bar
-            LinearProgressIndicator(
-                progress = { progressPercent },
+            // Sleek glowing progress slider with dot
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(6.dp)
-                    .clip(RoundedCornerShape(3.dp)),
-                color = NeonPurple,
-                trackColor = BunkerSurfaceVariant,
-            )
+                    .clip(RoundedCornerShape(3.dp))
+                    .background(Color(0xFF231840))
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(fraction = progressPercent)
+                        .height(6.dp)
+                        .background(
+                            Brush.horizontalGradient(
+                                listOf(
+                                    Color(0xFFA855F7),
+                                    Color(0xFFEC4899),
+                                    Color(0xFF06B6D4)
+                                )
+                            )
+                        )
+                )
+            }
 
             if (stats.currentBatch.isNotBlank()) {
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
                 Text(
                     text = stats.currentBatch,
                     color = TextMuted,
-                    fontSize = 11.sp,
+                    fontSize = 10.sp,
                     fontFamily = FontFamily.Monospace,
                     maxLines = 1
                 )
@@ -172,26 +226,37 @@ fun CyberHud(
 }
 
 @Composable
-private fun HudMetric(
+private fun HudMetricWithIcon(
     label: String,
     value: String,
-    color: androidx.compose.ui.graphics.Color
+    icon: ImageVector,
+    iconColor: Color,
+    valueColor: Color
 ) {
     Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Text(
             text = label,
             color = TextSecondary,
-            fontSize = 10.sp,
+            fontSize = 9.sp,
             fontWeight = FontWeight.Medium,
             letterSpacing = 0.8.sp
         )
         Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = value,
-            color = color,
-            fontSize = 15.sp,
-            fontWeight = FontWeight.Bold,
-            fontFamily = FontFamily.Monospace
-        )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = value,
+                color = valueColor,
+                fontSize = 14.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace
+            )
+            Spacer(modifier = Modifier.width(4.dp))
+            Icon(
+                imageVector = icon,
+                contentDescription = null,
+                tint = iconColor,
+                modifier = Modifier.size(14.dp)
+            )
+        }
     }
 }
