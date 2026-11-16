@@ -14,6 +14,7 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -154,385 +155,380 @@ fun MainScreen(
             )
         }
 
-        // Main Foreground Content
-        Column(
+        // Master scrollable list covering entire screen with bottom dock inset
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(horizontal = 16.dp)
+                .padding(horizontal = 16.dp),
+            contentPadding = PaddingValues(top = 16.dp, bottom = 100.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // Top App Bar / Header
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Image(
-                        painter = painterResource(id = R.drawable.bunker_logo),
-                        contentDescription = "Bunker Cat Logo",
-                        modifier = Modifier
-                            .size(42.dp)
-                            .clip(CircleShape)
-                            .border(1.5.dp, NeonPurple, CircleShape)
-                    )
-                    Spacer(modifier = Modifier.width(10.dp))
-                    Column {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "BUNKER PARSER",
-                                color = TextPrimary,
-                                fontSize = 19.sp,
-                                fontWeight = FontWeight.Black,
-                                letterSpacing = 1.2.sp,
-                                fontFamily = FontFamily.Monospace
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Box(
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .background(NeonPurple)
-                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                            ) {
-                                Text(
-                                    text = "v1.2.2",
-                                    color = BunkerBg,
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = FontFamily.Monospace
-                                )
-                            }
-                        }
-                        Text(
-                            text = "Автономный Xray Core чекер",
-                            color = TextMuted,
-                            fontSize = 11.sp
-                        )
-                    }
-                }
-
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    // Wallpaper picker button
-                    IconButton(
-                        onClick = { bgPickerLauncher.launch("image/*") },
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(if (customBgPath != null) NeonPurpleDark else BunkerSurface)
-                            .border(1.dp, if (customBgPath != null) NeonCyan else BunkerCardBorder, CircleShape)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Wallpaper,
-                            contentDescription = "Фон из галереи",
-                            tint = if (customBgPath != null) NeonCyan else TextSecondary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-
-                    // Settings button
-                    IconButton(
-                        onClick = { showSettings = !showSettings },
-                        modifier = Modifier
-                            .size(40.dp)
-                            .clip(CircleShape)
-                            .background(if (showSettings) NeonPurpleDark else BunkerSurface)
-                            .border(1.dp, BunkerCardBorder, CircleShape)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Tune,
-                            contentDescription = "Настройки",
-                            tint = if (showSettings) NeonCyan else TextSecondary,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // Mode Selector Tabs
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(BunkerSurface)
-                    .border(1.dp, BunkerCardBorder, RoundedCornerShape(12.dp))
-                    .padding(4.dp),
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
-            ) {
-                ParseMode.entries.forEach { mode ->
-                    val isSelected = mode == selectedMode
-                    Box(
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(8.dp))
-                            .background(if (isSelected) NeonPurpleDark else Color.Transparent)
-                            .clickable { viewModel.setMode(mode) }
-                            .padding(vertical = 10.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Text(
-                            text = "${mode.title} ${mode.heart}",
-                            color = if (isSelected) TextPrimary else TextSecondary,
-                            fontSize = 12.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
-                        )
-                    }
-                }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Settings collapsible panel
-            AnimatedVisibility(visible = showSettings) {
-                Column(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .background(BunkerSurface)
-                        .border(1.dp, BunkerCardBorder, RoundedCornerShape(12.dp))
-                        .padding(14.dp)
-                ) {
-                    // Custom Background Settings Row
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Фоновое изображение",
-                                color = TextPrimary,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                text = if (customBgPath != null) "Установлено фото из галереи" else "Стандартный тёмный киберпанк",
-                                color = if (customBgPath != null) NeonCyan else TextMuted,
-                                fontSize = 11.sp
-                            )
-                        }
-                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            if (customBgPath != null) {
-                                OutlinedButton(
-                                    onClick = { viewModel.resetCustomBackground() },
-                                    shape = RoundedCornerShape(8.dp),
-                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonRed)
-                                ) {
-                                    Text("Сброс", fontSize = 11.sp)
-                                }
-                            }
-                            OutlinedButton(
-                                onClick = { bgPickerLauncher.launch("image/*") },
-                                shape = RoundedCornerShape(8.dp),
-                                colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonCyan)
-                            ) {
-                                Icon(Icons.Default.Wallpaper, contentDescription = null, modifier = Modifier.size(14.dp))
-                                Spacer(modifier = Modifier.width(4.dp))
-                                Text(if (customBgPath != null) "Сменить" else "Галерея", fontSize = 11.sp)
-                            }
-                        }
-                    }
-
-                    HorizontalDivider(
-                        color = BunkerCardBorder,
-                        modifier = Modifier.padding(vertical = 10.dp)
-                    )
-
-                    // Strict 4/4 Toggle
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = "Строгий отбор 4/4 сервисов",
-                                color = TextPrimary,
-                                fontSize = 13.sp,
-                                fontWeight = FontWeight.SemiBold
-                            )
-                            Text(
-                                text = "Только ноды прошедшие YT + TG + ChatGPT + Gemini",
-                                color = TextMuted,
-                                fontSize = 11.sp
-                            )
-                        }
-                        Switch(
-                            checked = strictAll4,
-                            onCheckedChange = { viewModel.setStrictAll4(it) },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = BunkerBg,
-                                checkedTrackColor = NeonPurple,
-                                uncheckedThumbColor = TextMuted,
-                                uncheckedTrackColor = BunkerSurfaceVariant
-                            )
-                        )
-                    }
-
-                    HorizontalDivider(
-                        color = BunkerCardBorder,
-                        modifier = Modifier.padding(vertical = 10.dp)
-                    )
-
-                    // Workers Slider
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Параллельные потоки", color = TextSecondary, fontSize = 12.sp)
-                        Text("$workers потоков", color = NeonCyan, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    }
-                    Slider(
-                        value = workers.toFloat(),
-                        onValueChange = { viewModel.setWorkers(it.toInt()) },
-                        valueRange = 1f..16f,
-                        steps = 14,
-                        colors = SliderDefaults.colors(
-                            thumbColor = NeonCyan,
-                            activeTrackColor = NeonCyan,
-                            inactiveTrackColor = BunkerSurfaceVariant
-                        )
-                    )
-
-                    // Timeout Slider
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text("Таймаут проверки", color = TextSecondary, fontSize = 12.sp)
-                        Text(String.format("%.1f сек", timeoutSec), color = NeonPurple, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    }
-                    Slider(
-                        value = timeoutSec,
-                        onValueChange = { viewModel.setTimeout(it) },
-                        valueRange = 2.0f..8.0f,
-                        steps = 11,
-                        colors = SliderDefaults.colors(
-                            thumbColor = NeonPurple,
-                            activeTrackColor = NeonPurple,
-                            inactiveTrackColor = BunkerSurfaceVariant
-                        )
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Input buttons row
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                OutlinedButton(
-                    onClick = { filePickerLauncher.launch("text/plain") },
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
-                    border = ButtonDefaults.outlinedButtonBorder.copy(brush = Brush.horizontalGradient(listOf(NeonPurple, NeonCyan)))
-                ) {
-                    Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Выбрать TXT", fontSize = 12.sp)
-                }
-
-                OutlinedButton(
-                    onClick = { viewModel.loadFromClipboard() },
-                    modifier = Modifier.weight(1f),
-                    shape = RoundedCornerShape(10.dp),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
-                    border = ButtonDefaults.outlinedButtonBorder.copy(brush = Brush.horizontalGradient(listOf(NeonCyan, NeonPurple)))
-                ) {
-                    Icon(Icons.Default.ContentPaste, contentDescription = null, modifier = Modifier.size(16.dp))
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text("Из буфера", fontSize = 12.sp)
-                }
-            }
-
-            if (parsedItems.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(6.dp))
+            // Item 1: Top App Bar / Header
+            item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(
-                        text = "Загружено нод: ${parsedItems.size}",
-                        color = NeonGreen,
-                        fontSize = 11.sp,
-                        fontFamily = FontFamily.Monospace
-                    )
-                    IconButton(
-                        onClick = { viewModel.clear() },
-                        modifier = Modifier.size(24.dp)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Image(
+                            painter = painterResource(id = R.drawable.bunker_logo),
+                            contentDescription = "Bunker Cat Logo",
+                            modifier = Modifier
+                                .size(42.dp)
+                                .clip(CircleShape)
+                                .border(1.5.dp, NeonPurple, CircleShape)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "BUNKER PARSER",
+                                    color = TextPrimary,
+                                    fontSize = 19.sp,
+                                    fontWeight = FontWeight.Black,
+                                    letterSpacing = 1.2.sp,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(NeonPurple)
+                                        .padding(horizontal = 6.dp, vertical = 2.dp)
+                                ) {
+                                    Text(
+                                        text = "v1.2.3",
+                                        color = BunkerBg,
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
+                            }
+                            Text(
+                                text = "Автономный Xray Core чекер",
+                                color = TextMuted,
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        Icon(
-                            Icons.Default.Clear,
-                            contentDescription = "Очистить",
-                            tint = TextMuted,
-                            modifier = Modifier.size(14.dp)
+                        // Wallpaper picker button
+                        IconButton(
+                            onClick = { bgPickerLauncher.launch("image/*") },
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(if (customBgPath != null) NeonPurpleDark else BunkerSurface)
+                                .border(1.dp, if (customBgPath != null) NeonCyan else BunkerCardBorder, CircleShape)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Wallpaper,
+                                contentDescription = "Фон из галереи",
+                                tint = if (customBgPath != null) NeonCyan else TextSecondary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        // Settings button
+                        IconButton(
+                            onClick = { showSettings = !showSettings },
+                            modifier = Modifier
+                                .size(40.dp)
+                                .clip(CircleShape)
+                                .background(if (showSettings) NeonPurpleDark else BunkerSurface)
+                                .border(1.dp, BunkerCardBorder, CircleShape)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Tune,
+                                contentDescription = "Настройки",
+                                tint = if (showSettings) NeonCyan else TextSecondary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Item 2: Mode Selector Tabs
+            item {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(BunkerSurface)
+                        .border(1.dp, BunkerCardBorder, RoundedCornerShape(12.dp))
+                        .padding(4.dp),
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    ParseMode.entries.forEach { mode ->
+                        val isSelected = mode == selectedMode
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clip(RoundedCornerShape(8.dp))
+                                .background(if (isSelected) NeonPurpleDark else Color.Transparent)
+                                .clickable { viewModel.setMode(mode) }
+                                .padding(vertical = 10.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "${mode.title} ${mode.heart}",
+                                color = if (isSelected) TextPrimary else TextSecondary,
+                                fontSize = 12.sp,
+                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Item 3: Settings collapsible panel
+            item {
+                AnimatedVisibility(visible = showSettings) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(BunkerSurface)
+                            .border(1.dp, BunkerCardBorder, RoundedCornerShape(12.dp))
+                            .padding(14.dp)
+                    ) {
+                        // Custom Background Settings Row
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Фоновое изображение",
+                                    color = TextPrimary,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = if (customBgPath != null) "Установлено фото из галереи" else "Стандартный тёмный киберпанк",
+                                    color = if (customBgPath != null) NeonCyan else TextMuted,
+                                    fontSize = 11.sp
+                                )
+                            }
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                if (customBgPath != null) {
+                                    OutlinedButton(
+                                        onClick = { viewModel.resetCustomBackground() },
+                                        shape = RoundedCornerShape(8.dp),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonRed)
+                                    ) {
+                                        Text("Сброс", fontSize = 11.sp)
+                                    }
+                                }
+                                OutlinedButton(
+                                    onClick = { bgPickerLauncher.launch("image/*") },
+                                    shape = RoundedCornerShape(8.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonCyan)
+                                ) {
+                                    Icon(Icons.Default.Wallpaper, contentDescription = null, modifier = Modifier.size(14.dp))
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(if (customBgPath != null) "Сменить" else "Галерея", fontSize = 11.sp)
+                                }
+                            }
+                        }
+
+                        HorizontalDivider(
+                            color = BunkerCardBorder,
+                            modifier = Modifier.padding(vertical = 10.dp)
+                        )
+
+                        // Strict 4/4 Toggle
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Строгий отбор 4/4 сервисов",
+                                    color = TextPrimary,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = "Только ноды прошедшие YT + TG + ChatGPT + Gemini",
+                                    color = TextMuted,
+                                    fontSize = 11.sp
+                                )
+                            }
+                            Switch(
+                                checked = strictAll4,
+                                onCheckedChange = { viewModel.setStrictAll4(it) },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = BunkerBg,
+                                    checkedTrackColor = NeonPurple,
+                                    uncheckedThumbColor = TextMuted,
+                                    uncheckedTrackColor = BunkerSurfaceVariant
+                                )
+                            )
+                        }
+
+                        HorizontalDivider(
+                            color = BunkerCardBorder,
+                            modifier = Modifier.padding(vertical = 10.dp)
+                        )
+
+                        // Workers Slider
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Параллельные потоки", color = TextSecondary, fontSize = 12.sp)
+                            Text("$workers потоков", color = NeonCyan, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Slider(
+                            value = workers.toFloat(),
+                            onValueChange = { viewModel.setWorkers(it.toInt()) },
+                            valueRange = 1f..16f,
+                            steps = 14,
+                            colors = SliderDefaults.colors(
+                                thumbColor = NeonCyan,
+                                activeTrackColor = NeonCyan,
+                                inactiveTrackColor = BunkerSurfaceVariant
+                            )
+                        )
+
+                        // Timeout Slider
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text("Таймаут проверки", color = TextSecondary, fontSize = 12.sp)
+                            Text(String.format("%.1f сек", timeoutSec), color = NeonPurple, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        }
+                        Slider(
+                            value = timeoutSec,
+                            onValueChange = { viewModel.setTimeout(it) },
+                            valueRange = 2.0f..8.0f,
+                            steps = 11,
+                            colors = SliderDefaults.colors(
+                                thumbColor = NeonPurple,
+                                activeTrackColor = NeonPurple,
+                                inactiveTrackColor = BunkerSurfaceVariant
+                            )
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Cyber Action Button (Start / Stop)
-            Button(
-                onClick = {
-                    if (stats.isRunning) {
-                        viewModel.stopChecking()
-                    } else {
-                        viewModel.startChecking()
+            // Item 4: Input buttons row
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = { filePickerLauncher.launch("text/plain") },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
+                        border = ButtonDefaults.outlinedButtonBorder.copy(brush = Brush.horizontalGradient(listOf(NeonPurple, NeonCyan)))
+                    ) {
+                        Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Выбрать TXT", fontSize = 12.sp)
                     }
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp),
-                shape = RoundedCornerShape(12.dp),
-                colors = ButtonDefaults.buttonColors(
-                    containerColor = if (stats.isRunning) NeonRed else NeonPurpleDark
-                )
-            ) {
-                Icon(
-                    imageVector = if (stats.isRunning) Icons.Default.Stop else Icons.Default.PlayArrow,
-                    contentDescription = null,
-                    modifier = Modifier.size(20.dp),
-                    tint = TextPrimary
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = if (stats.isRunning) "ОСТАНОВИТЬ ТЕСТ" else "НАЧАТЬ ПАРСИНГ И ТЕСТ ⚡",
-                    fontSize = 13.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace,
-                    letterSpacing = 1.sp,
-                    color = TextPrimary
-                )
-            }
 
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Cyber HUD
-            CyberHud(stats = stats)
-
-            // Live Analytics Block (Countries & Protocols)
-            AnimatedVisibility(visible = results.isNotEmpty()) {
-                Column {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    AnalyticsBlock(results = results)
+                    OutlinedButton(
+                        onClick = { viewModel.loadFromClipboard() },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
+                        border = ButtonDefaults.outlinedButtonBorder.copy(brush = Brush.horizontalGradient(listOf(NeonCyan, NeonPurple)))
+                    ) {
+                        Icon(Icons.Default.ContentPaste, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Из буфера", fontSize = 12.sp)
+                    }
                 }
             }
 
-            // Bottom Export Actions (visible when results.isNotEmpty())
-            AnimatedVisibility(visible = results.isNotEmpty()) {
-                Column {
-                    Spacer(modifier = Modifier.height(10.dp))
+            // Item 5: Node count info (if loaded)
+            if (parsedItems.isNotEmpty()) {
+                item {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            text = "Загружено нод: ${parsedItems.size}",
+                            color = NeonGreen,
+                            fontSize = 11.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        IconButton(
+                            onClick = { viewModel.clear() },
+                            modifier = Modifier.size(24.dp)
+                        ) {
+                            Icon(
+                                Icons.Default.Clear,
+                                contentDescription = "Очистить",
+                                tint = TextMuted,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Item 6: Cyber Action Button (Start / Stop)
+            item {
+                Button(
+                    onClick = {
+                        if (stats.isRunning) {
+                            viewModel.stopChecking()
+                        } else {
+                            viewModel.startChecking()
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (stats.isRunning) NeonRed else NeonPurpleDark
+                    )
+                ) {
+                    Icon(
+                        imageVector = if (stats.isRunning) Icons.Default.Stop else Icons.Default.PlayArrow,
+                        contentDescription = null,
+                        modifier = Modifier.size(20.dp),
+                        tint = TextPrimary
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = if (stats.isRunning) "ОСТАНОВИТЬ ТЕСТ" else "НАЧАТЬ ПАРСИНГ И ТЕСТ ⚡",
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 1.sp,
+                        color = TextPrimary
+                    )
+                }
+            }
+
+            // Item 7: Cyber HUD (real-time progress, counters, rate)
+            item {
+                CyberHud(stats = stats)
+            }
+
+            // Item 8: Inline Export Action Buttons
+            if (results.isNotEmpty()) {
+                item {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
@@ -582,24 +578,117 @@ fun MainScreen(
                         }
                     }
                 }
+
+                // Item 9: Live Analytics Block (Countries & Protocols)
+                item {
+                    AnalyticsBlock(results = results)
+                }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            // Item 10: Results List Cards
+            itemsIndexed(results) { index, item ->
+                ConfigCard(
+                    result = item,
+                    index = index + 1,
+                    onCopy = { viewModel.copySingleNode(it) }
+                )
+            }
+        }
 
-            // Results List
-            LazyColumn(
-                modifier = Modifier.weight(1f),
-                verticalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                itemsIndexed(results) { index, item ->
-                    ConfigCard(
-                        result = item,
-                        index = index + 1,
-                        onCopy = { viewModel.copySingleNode(it) }
+        // Sticky Bottom Cyber Dock for instant export without having to scroll
+        AnimatedVisibility(
+            visible = results.isNotEmpty(),
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+        ) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color(0xF0120F24))
+                    .border(
+                        1.5.dp,
+                        Brush.horizontalGradient(listOf(NeonPurple, NeonCyan, NeonGreen)),
+                        RoundedCornerShape(16.dp)
                     )
-                }
-                item {
-                    Spacer(modifier = Modifier.height(16.dp))
+                    .padding(8.dp)
+            ) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Button(
+                        onClick = { viewModel.copyResultsToClipboard() },
+                        modifier = Modifier
+                            .weight(1.2f)
+                            .height(44.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = NeonPurpleDark)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ContentCopy,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = NeonGreen
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "КОПИЯ TXT",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                    }
+
+                    Button(
+                        onClick = { viewModel.saveResultsToDownloads() },
+                        modifier = Modifier
+                            .weight(1.2f)
+                            .height(44.dp),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = BunkerSurfaceVariant)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FileDownload,
+                            contentDescription = null,
+                            modifier = Modifier.size(16.dp),
+                            tint = NeonCyan
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = "СКАЧАТЬ",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                    }
+
+                    IconButton(
+                        onClick = {
+                            val text = viewModel.getExportText()
+                            val shareIntent = Intent(Intent.ACTION_SEND).apply {
+                                type = "text/plain"
+                                putExtra(Intent.EXTRA_SUBJECT, selectedMode.fileName)
+                                putExtra(Intent.EXTRA_TEXT, text)
+                            }
+                            context.startActivity(Intent.createChooser(shareIntent, "Поделиться подпиской"))
+                        },
+                        modifier = Modifier
+                            .size(44.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(BunkerSurfaceVariant)
+                            .border(1.dp, BunkerCardBorder, RoundedCornerShape(10.dp))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Share,
+                            contentDescription = "Поделиться",
+                            tint = TextPrimary,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
                 }
             }
         }

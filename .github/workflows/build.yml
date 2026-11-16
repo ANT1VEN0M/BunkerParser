@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Release Tag (e.g. v1.2.2)'
+        description: 'Release Tag (e.g. v1.2.3)'
         required: false
-        default: 'v1.2.2'
+        default: 'v1.2.3'
         type: string
   push:
     branches:
@@ -57,36 +57,37 @@ jobs:
     - name: Prepare Dist
       run: |
         mkdir -p dist
-        find app/build/outputs/apk/release -type f -name "*.apk" -exec cp {} dist/BunkerParser-v1.2.2.apk \;
+        find app/build/outputs/apk/release -type f -name "*.apk" -exec cp {} dist/BunkerParser-v1.2.3.apk \;
         ls -la dist/
 
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: BunkerParser-v1.2.2
-        path: dist/BunkerParser-v1.2.2.apk
+        name: BunkerParser-v1.2.3
+        path: dist/BunkerParser-v1.2.3.apk
 
     - name: Create or Update GitHub Release
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: ${{ github.event.inputs.release_tag || 'v1.2.2' }}
-        name: "Bunker Parser v1.2.2 (Fix Xray Core Outbound JSON Schema & Latency Tests)"
+        tag_name: ${{ github.event.inputs.release_tag || 'v1.2.3' }}
+        name: "Bunker Parser v1.2.3 (Full-Page Scrolling, Sticky Export Dock, All Formats Support)"
         draft: false
         prerelease: false
         make_latest: true
         body: |
-          ⚡ **BUNKER PARSER v1.2.2 ДЛЯ ANDROID** 🐈‍⬛
+          ⚡ **BUNKER PARSER v1.2.3 ДЛЯ ANDROID** 🐈‍⬛
 
-          Критическое исправление проверки Xray Core!
+          Большое обновление интерфейса и всеядного чекера узлов!
 
-          🛠 **Что исправлено в v1.2.2:**
-          - 🎯 **Исправлена схема JSON для Xray Core:** восстановлена структура `vnext -> users` для VLESS/VMess и `servers` для Trojan/Shadowsocks. В Reality настройки заменён параметр `password` на `publicKey`, а параметр `method` в стримах исправлен на стандартный `network`.
-          - ⚡ **Честный тест туннеля через Google / Gstatic 204:** реальный пинг замеряется внутри туннеля без ложных отсевов.
-          - 🖤 **Автоматический режим в ЧС/БС:** при переключении на ЧС или БС строгий фильтр 4/4 сервисов по умолчанию отключается, пропуская все реально рабочие прокси-ноды (при желании можно включить в настройках).
-          - 🚀 **Поддержка Hysteria2:** добавлен надежный TCP/TLS fallback для протоколов hy2/hysteria2.
-          - 🖼 **Свой фон из галереи (Custom Wallpaper).**
-          - 🌐 **100% определение стран и флагов.**
-          - 📊 **Интерактивная аналитика протоколов и локаций.**
+          🛠 **Что нового в v1.2.3:**
+          - 📜 **Скроллинг всего экрана:** весь экран теперь представляет собой единый плавный список. Все блоки (HUD, Аналитика со всеми 20+ странами и карточки результатов) прокручиваются от самого верха до низа без обрезания.
+          - 📥 **Плавающая кибер-панель (Sticky Export Dock):** кнопки «КОПИЯ TXT», «СКАЧАТЬ» (в папку Downloads) и «Поделиться» закреплены внизу экрана поверх интерфейса — результат можно забрать в 1 клик в любой момент!
+          - 🌐 **Честный тест всех протоколов (VLESS, VMess, Trojan, Shadowsocks, Hysteria2):**
+            - Исправлен резолв SNI: теперь при отсутствии явного sni берётся `host` (CDN / домен), а не сырой IP.
+            - Защита Base64 в Reality ключах: знаки `+` в `pbk` больше не заменяются на пробелы.
+            - Добавлен мгновенный TCP Pre-check (по стандарту v2rayNG), ускоряющий проверку тысяч ключей.
+            - Проверка через независимые быстрые эндпоинты `gstatic.com` и Cloudflare `generate_204`.
+            - В режиме ЧС все форматы серверов честно сохраняются в живые без дискриминации.
 
           ---
           💬 Чат сообщества: https://t.me/BUNKER_K0TA
@@ -95,4 +96,4 @@ jobs:
           🌐 Официальный сайт: https://kotxantidot.github.io/Mysite/
           👑 Создатель: @k0tlux
         files: |
-          dist/BunkerParser-v1.2.2.apk
+          dist/BunkerParser-v1.2.3.apk

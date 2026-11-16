@@ -289,15 +289,18 @@ object XrayConfigBuilder {
         }
         stream.addProperty("network", network)
 
-        val sni = q["sni"]?.ifEmpty { q["host"] }?.ifEmpty { host } ?: host
+        val rawSni = q["sni"]?.trim().orEmpty()
+        val rawHost = q["host"]?.trim().orEmpty()
+        val sni = if (rawSni.isNotEmpty()) rawSni else if (rawHost.isNotEmpty()) rawHost else host
         val path = q["path"]?.ifEmpty { "/" } ?: "/"
-        val hostHeader = q["host"].orEmpty()
+        val hostHeader = if (rawHost.isNotEmpty()) rawHost else if (rawSni.isNotEmpty()) rawSni else host
 
         when (network) {
             "ws" -> {
                 val ws = JsonObject().apply {
                     addProperty("path", path)
                     if (hostHeader.isNotEmpty()) {
+                        addProperty("host", hostHeader)
                         val headers = JsonObject().apply {
                             addProperty("Host", hostHeader)
                         }
@@ -426,7 +429,12 @@ object XrayConfigBuilder {
             val parts = param.split("=", limit = 2)
             if (parts.size == 2) {
                 val key = parts[0].lowercase().trim()
-                val value = try { URLDecoder.decode(parts[1], "UTF-8") } catch (_: Exception) { parts[1] }
+                val rawVal = parts[1].trim()
+                val value = if (key in listOf("pbk", "sid", "password", "key", "cert", "ech")) {
+                    rawVal
+                } else {
+                    try { URLDecoder.decode(rawVal, "UTF-8") } catch (_: Exception) { rawVal }
+                }
                 result[key] = value
             }
         }
