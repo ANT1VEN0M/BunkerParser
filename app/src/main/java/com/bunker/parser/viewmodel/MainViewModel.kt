@@ -172,6 +172,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
 
         viewModelScope.launch {
+            val context = getApplication<Application>()
+            if (!CoreNativeManager.isReady()) {
+                CoreNativeManager.initCoreEnv(context)
+            }
             checkEngine.start(
                 items = items,
                 mode = _selectedMode.value,

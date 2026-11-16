@@ -4,7 +4,6 @@ import android.util.Base64
 import com.bunker.parser.model.CheckItem
 import com.google.gson.Gson
 import com.google.gson.JsonObject
-import java.net.URI
 import java.net.URLDecoder
 import java.net.URLEncoder
 
@@ -41,7 +40,7 @@ object UriParser {
             val (host, port) = extractHostAndPort(hostAndPort, defaultPort = 443)
             if (host.isEmpty() || port <= 0) return null
 
-            val remark = if (frag.isNotEmpty()) URLDecoder.decode(frag, "UTF-8") else ""
+            val remark = if (frag.isNotEmpty()) try { URLDecoder.decode(frag, "UTF-8") } catch (_: Exception) { frag } else ""
             CheckItem(
                 seq = lineNo,
                 lineNo = lineNo,
@@ -88,7 +87,7 @@ object UriParser {
         return try {
             val (base, frag) = splitBaseAndFrag(raw)
             val body = base.substringAfter("://")
-            val remark = if (frag.isNotEmpty()) URLDecoder.decode(frag, "UTF-8") else ""
+            val remark = if (frag.isNotEmpty()) try { URLDecoder.decode(frag, "UTF-8") } catch (_: Exception) { frag } else ""
 
             val host: String
             val port: Int
@@ -139,8 +138,35 @@ object UriParser {
                 item.rawUri
             }
         } else {
+            val sanitizedBase = sanitizeBaseUri(item.baseUri)
             val encodedFrag = URLEncoder.encode(newRemark, "UTF-8").replace("+", "%20")
-            "${item.baseUri}#$encodedFrag"
+            "$sanitizedBase#$encodedFrag"
+        }
+    }
+
+    private fun sanitizeBaseUri(baseUri: String): String {
+        if (!baseUri.contains("extra=")) return baseUri
+        return try {
+            val prefix = baseUri.substringBefore("extra=")
+            val rest = baseUri.substringAfter("extra=")
+            val rawExtraEncoded = rest.substringBefore("&")
+            val suffix = if (rest.contains("&")) "&" + rest.substringAfter("&") else ""
+
+            val decodedExtra = URLDecoder.decode(rawExtraEncoded, "UTF-8")
+            val sanitized = XrayConfigBuilder.sanitizeExtraJson(decodedExtra)
+            if (sanitized != null) {
+                val newExtra = URLEncoder.encode(gson.toJson(sanitized), "UTF-8")
+                "$prefix" + "extra=" + newExtra + suffix
+            } else {
+                // If extra was invalid, remove it
+                if (prefix.endsWith("?") || prefix.endsWith("&")) {
+                    prefix.dropLast(1) + suffix
+                } else {
+                    prefix + suffix
+                }
+            }
+        } catch (_: Exception) {
+            baseUri
         }
     }
 

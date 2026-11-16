@@ -3,7 +3,9 @@ package com.bunker.parser.core
 import android.util.Base64
 import com.google.gson.Gson
 import com.google.gson.JsonArray
+import com.google.gson.JsonElement
 import com.google.gson.JsonObject
+import com.google.gson.JsonPrimitive
 import java.net.URLDecoder
 
 object XrayConfigBuilder {
@@ -17,6 +19,7 @@ object XrayConfigBuilder {
             "vmess" -> buildVmessOutbound(trimmed)
             "trojan" -> buildTrojanOutbound(trimmed)
             "ss" -> buildShadowsocksOutbound(trimmed)
+            "hysteria2", "hy2" -> buildHysteria2Outbound(trimmed)
             else -> null
         } ?: return null
 
@@ -57,11 +60,10 @@ object XrayConfigBuilder {
                 addProperty("protocol", "vless")
             }
 
-            // Xray Core VLESS requires vnext -> users
             val user = JsonObject().apply {
                 addProperty("id", userId)
                 addProperty("encryption", q["encryption"] ?: "none")
-                if (flow.isNotBlank()) {
+                if (transport == "tcp" && flow.isNotBlank()) {
                     addProperty("flow", flow)
                 }
             }
@@ -85,9 +87,9 @@ object XrayConfigBuilder {
                 host = host,
                 port = port,
                 q = q
-            )
-            outbound.add("streamSettings", stream)
+            ) ?: return null
 
+            outbound.add("streamSettings", stream)
             outbound
         } catch (_: Exception) {
             null
@@ -116,7 +118,6 @@ object XrayConfigBuilder {
                 addProperty("protocol", "vmess")
             }
 
-            // Xray Core VMess requires vnext -> users
             val user = JsonObject().apply {
                 addProperty("id", id)
                 addProperty("alterId", obj.get("aid")?.asString?.toIntOrNull() ?: 0)
@@ -147,9 +148,9 @@ object XrayConfigBuilder {
                 host = host,
                 port = port,
                 q = q
-            )
-            outbound.add("streamSettings", stream)
+            ) ?: return null
 
+            outbound.add("streamSettings", stream)
             outbound
         } catch (_: Exception) {
             null
@@ -178,7 +179,6 @@ object XrayConfigBuilder {
                 addProperty("protocol", "trojan")
             }
 
-            // Xray Core Trojan requires servers array
             val server = JsonObject().apply {
                 addProperty("address", host)
                 addProperty("port", port)
@@ -197,9 +197,9 @@ object XrayConfigBuilder {
                 host = host,
                 port = port,
                 q = q
-            )
-            outbound.add("streamSettings", stream)
+            ) ?: return null
 
+            outbound.add("streamSettings", stream)
             outbound
         } catch (_: Exception) {
             null
@@ -271,13 +271,63 @@ object XrayConfigBuilder {
         }
     }
 
+    private fun buildHysteria2Outbound(uri: String): JsonObject? {
+        return try {
+            val (base, _) = splitBaseAndFrag(uri)
+            val withoutScheme = base.substringAfter("://")
+            val auth = withoutScheme.substringBefore("@")
+            val hostAndRest = withoutScheme.substringAfter("@")
+            val hostPortStr = hostAndRest.substringBefore("?").substringBefore("/")
+            val queryStr = if (hostAndRest.contains("?")) hostAndRest.substringAfter("?").substringBefore("#") else ""
+
+            val (host, port) = extractHostAndPort(hostPortStr, 443)
+            val pass = URLDecoder.decode(auth, "UTF-8").trim()
+            if (host.isEmpty()) return null
+
+            val q = parseQuery(queryStr)
+            val sni = q["sni"] ?: host
+
+            val outbound = JsonObject().apply {
+                addProperty("tag", "proxy")
+                addProperty("protocol", "hysteria")
+            }
+
+            val settings = JsonObject().apply {
+                addProperty("address", host)
+                addProperty("port", port)
+                addProperty("version", 2)
+            }
+            outbound.add("settings", settings)
+
+            val stream = JsonObject().apply {
+                addProperty("network", "hysteria")
+                val hySettings = JsonObject().apply {
+                    addProperty("version", 2)
+                    addProperty("auth", pass)
+                }
+                add("hysteriaSettings", hySettings)
+                addProperty("security", "tls")
+                val tls = JsonObject().apply {
+                    addProperty("serverName", sni)
+                    addProperty("allowInsecure", true)
+                }
+                add("tlsSettings", tls)
+            }
+            outbound.add("streamSettings", stream)
+
+            outbound
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     private fun buildStreamSettings(
         transport: String,
         security: String,
         host: String,
         port: Int,
         q: Map<String, String>
-    ): JsonObject {
+    ): JsonObject? {
         val stream = JsonObject()
         val network = when (transport) {
             "ws", "websocket" -> "ws"
@@ -300,7 +350,6 @@ object XrayConfigBuilder {
                 val ws = JsonObject().apply {
                     addProperty("path", path)
                     if (hostHeader.isNotEmpty()) {
-                        addProperty("host", hostHeader)
                         val headers = JsonObject().apply {
                             addProperty("Host", hostHeader)
                         }
@@ -317,7 +366,7 @@ object XrayConfigBuilder {
                 stream.add("httpupgradeSettings", hu)
             }
             "grpc" -> {
-                val serviceName = q["servicename"] ?: q["serviceName"] ?: path.trim('/')
+                val serviceName = q["servicename"] ?: path.trim('/')
                 val grpc = JsonObject().apply {
                     if (serviceName.isNotEmpty()) addProperty("serviceName", serviceName)
                     if (hostHeader.isNotEmpty()) addProperty("authority", hostHeader)
@@ -330,6 +379,14 @@ object XrayConfigBuilder {
                     addProperty("path", path)
                     addProperty("mode", q["mode"] ?: "auto")
                     if (hostHeader.isNotEmpty()) addProperty("host", hostHeader)
+                    // If clean extra is present, sanitize and attach
+                    val rawExtra = q["extra"]
+                    if (!rawExtra.isNullOrBlank()) {
+                        val sanitized = sanitizeExtraJson(rawExtra)
+                        if (sanitized != null) {
+                            add("extra", sanitized)
+                        }
+                    }
                 }
                 stream.add("xhttpSettings", xhttp)
             }
@@ -359,15 +416,21 @@ object XrayConfigBuilder {
 
         when (security) {
             "reality" -> {
+                val pbk = (q["pbk"] ?: q["publickey"]).orEmpty().trim()
+                // Xray core STRICTLY requires valid Curve25519 public key (43-44 base64 characters)
+                if (pbk.length !in 40..50) {
+                    return null // Invalid reality key will crash Xray unmarshaler, skip invalid node
+                }
                 stream.addProperty("security", "reality")
                 val reality = JsonObject().apply {
                     addProperty("serverName", sni)
                     addProperty("fingerprint", q["fp"] ?: "chrome")
                     addProperty("show", false)
-                    addProperty("publicKey", q["pbk"].orEmpty())
-                    addProperty("shortId", q["sid"].orEmpty())
-                    if (q["spx"]?.isNotEmpty() == true) {
-                        addProperty("spiderX", q["spx"])
+                    addProperty("publicKey", pbk)
+                    addProperty("shortId", (q["sid"] ?: q["shortid"]).orEmpty().trim())
+                    val spx = q["spx"] ?: "/"
+                    if (spx.isNotEmpty()) {
+                        addProperty("spiderX", spx)
                     }
                 }
                 stream.add("realitySettings", reality)
@@ -394,6 +457,36 @@ object XrayConfigBuilder {
         }
 
         return stream
+    }
+
+    fun sanitizeExtraJson(rawExtra: String): JsonObject? {
+        return try {
+            val element = gson.fromJson(rawExtra, JsonElement::class.java)
+            if (element.isJsonObject) {
+                sanitizeElement(element.asJsonObject)
+                element.asJsonObject
+            } else {
+                null
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun sanitizeElement(obj: JsonObject) {
+        val keys = obj.keySet().toList()
+        for (k in keys) {
+            val v = obj.get(k)
+            if (v.isJsonPrimitive && v.asJsonPrimitive.isString) {
+                val str = v.asString
+                val intVal = str.toLongOrNull()
+                if (intVal != null) {
+                    obj.addProperty(k, intVal)
+                }
+            } else if (v.isJsonObject) {
+                sanitizeElement(v.asJsonObject)
+            }
+        }
     }
 
     private fun splitBaseAndFrag(raw: String): Pair<String, String> {
@@ -430,8 +523,8 @@ object XrayConfigBuilder {
             if (parts.size == 2) {
                 val key = parts[0].lowercase().trim()
                 val rawVal = parts[1].trim()
-                val value = if (key in listOf("pbk", "sid", "password", "key", "cert", "ech")) {
-                    rawVal
+                val value = if (key in listOf("pbk", "publickey", "sid", "shortid", "password", "key", "cert", "ech", "extra")) {
+                    try { URLDecoder.decode(rawVal, "UTF-8") } catch (_: Exception) { rawVal }
                 } else {
                     try { URLDecoder.decode(rawVal, "UTF-8") } catch (_: Exception) { rawVal }
                 }

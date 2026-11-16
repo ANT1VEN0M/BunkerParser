@@ -5,11 +5,10 @@ import com.bunker.parser.model.CheckResult
 import com.bunker.parser.model.CheckerStats
 import com.bunker.parser.model.ParseMode
 import kotlinx.coroutines.*
+import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 import java.net.InetSocketAddress
 import java.net.Socket
 import java.util.concurrent.atomic.AtomicBoolean
@@ -24,13 +23,13 @@ class CheckEngine {
     val results: StateFlow<List<CheckResult>> = _results.asStateFlow()
 
     private val isRunningFlag = AtomicBoolean(false)
-    private var job: Job? = null
+    private var engineJob: Job? = null
 
     fun isRunning(): Boolean = isRunningFlag.get()
 
     fun stop() {
         isRunningFlag.set(false)
-        job?.cancel()
+        engineJob?.cancel()
         _stats.value = _stats.value.copy(isRunning = false)
     }
 
@@ -54,7 +53,7 @@ class CheckEngine {
         val deadCounter = AtomicInteger(0)
 
         val startTime = System.currentTimeMillis()
-        val semaphore = Semaphore(workers.coerceIn(1, 24))
+        val workerPoolSize = workers.coerceIn(1, 24)
 
         _stats.value = CheckerStats(
             total = total,
@@ -63,117 +62,137 @@ class CheckEngine {
             dead = 0,
             ratePerSec = 0f,
             isRunning = true,
-            currentBatch = "Старт реальной проверки узлов..."
+            currentBatch = "Старт проверки Xray Core..."
         )
 
-        job = launch {
-            val tasks = items.map { item ->
-                async {
-                    if (!isRunningFlag.get()) return@async null
+        engineJob = launch {
+            val channel = Channel<CheckItem>(capacity = Channel.BUFFERED)
+            val listLock = Any()
+            var lastUiUpdateMs = System.currentTimeMillis()
 
-                    semaphore.withPermit {
-                        if (!isRunningFlag.get()) return@withPermit null
+            // Producer: sends items into channel sequentially (zero heap explosion)
+            launch(Dispatchers.IO) {
+                for (item in items) {
+                    if (!isRunningFlag.get()) break
+                    channel.send(item)
+                }
+                channel.close()
+            }
 
-                        val timeoutMs = (timeoutSec * 1000).toInt().coerceIn(1000, 10000)
+            // Fixed worker pool: only workerPoolSize coroutines exist simultaneously
+            val workerJobs = (1..workerPoolSize).map {
+                launch(Dispatchers.IO) {
+                    for (item in channel) {
+                        if (!isRunningFlag.get()) break
+
                         val configJson = XrayConfigBuilder.buildConfig(item.rawUri)
-
                         var isAlive = false
                         var finalPing = 0L
                         val services = mutableListOf<String>()
 
-                        // Quick TCP pre-check (1.5s timeout) like v2rayNG to eliminate dead hosts swiftly
-                        val preTcpPing = probeTcpPing(item.host, item.port, 1500)
-
-                        if (preTcpPing > 0) {
-                            if (configJson != null) {
-                                // Step 1: Real proxy verification against fastest 204 endpoints
-                                var proxyPing = CoreNativeManager.measureOutboundDelay(
+                        if (configJson != null) {
+                            // Quick TCP pre-check (1000ms timeout) to drop completely dead IP/ports immediately
+                            val preTcp = probeTcpPing(item.host, item.port, 1000)
+                            if (preTcp > 0) {
+                                // ── STEP 1: Real proxy tunnel check via Xray Core ──
+                                // Test YouTube endpoint
+                                var ytPing = CoreNativeManager.measureOutboundDelay(
                                     configJson,
-                                    "https://www.gstatic.com/generate_204"
+                                    "https://www.youtube.com/generate_204"
                                 )
-                                if (proxyPing <= 0) {
-                                    proxyPing = CoreNativeManager.measureOutboundDelay(
-                                        configJson,
-                                        "https://cp.cloudflare.com/generate_204"
-                                    )
-                                }
-                                if (proxyPing <= 0) {
-                                    proxyPing = CoreNativeManager.measureOutboundDelay(
+                                if (ytPing <= 0) {
+                                    // Secondary check against Google / Cloudflare
+                                    ytPing = CoreNativeManager.measureOutboundDelay(
                                         configJson,
                                         "https://www.google.com/generate_204"
                                     )
                                 }
 
-                                if (proxyPing > 0) {
+                                if (ytPing > 0) {
                                     isAlive = true
-                                    services.add("TUNNEL")
-                                    val pings = mutableListOf(proxyPing)
+                                    services.add("YT")
+                                    val pings = mutableListOf(ytPing)
 
-                                    // Probing additional services if in MIX mode or strict is requested
-                                    if (strict4Services || mode == ParseMode.MIX) {
-                                        // Step 2: Probe Telegram
-                                        val tgPing = CoreNativeManager.measureOutboundDelay(
-                                            configJson,
-                                            "https://telegram.org/"
-                                        )
-                                        if (tgPing > 0) {
-                                            services.add("TG")
-                                            pings.add(tgPing)
-                                        }
+                                    // ── STEP 2: Probe Telegram ──
+                                    val tgPing = CoreNativeManager.measureOutboundDelay(
+                                        configJson,
+                                        "https://telegram.org/"
+                                    )
+                                    if (tgPing > 0) {
+                                        services.add("TG")
+                                        pings.add(tgPing)
+                                    }
 
-                                        // Step 3: Probe ChatGPT
-                                        val gptPing = CoreNativeManager.measureOutboundDelay(
-                                            configJson,
-                                            "https://chatgpt.com/robots.txt"
-                                        )
-                                        if (gptPing > 0) {
-                                            services.add("GPT")
-                                            pings.add(gptPing)
-                                        }
+                                    // ── STEP 3: Probe ChatGPT ──
+                                    val gptPing = CoreNativeManager.measureOutboundDelay(
+                                        configJson,
+                                        "https://chatgpt.com/robots.txt"
+                                    )
+                                    if (gptPing > 0) {
+                                        services.add("GPT")
+                                        pings.add(gptPing)
+                                    }
 
-                                        // Step 4: Probe Gemini
-                                        val gemPing = CoreNativeManager.measureOutboundDelay(
-                                            configJson,
-                                            "https://gemini.google.com/robots.txt"
-                                        )
-                                        if (gemPing > 0) {
-                                            services.add("GEM")
-                                            pings.add(gemPing)
-                                        }
+                                    // ── STEP 4: Probe Gemini ──
+                                    val gemPing = CoreNativeManager.measureOutboundDelay(
+                                        configJson,
+                                        "https://gemini.google.com/robots.txt"
+                                    )
+                                    if (gemPing > 0) {
+                                        services.add("GEM")
+                                        pings.add(gemPing)
                                     }
 
                                     finalPing = pings.average().toLong()
-                                } else if (!strict4Services) {
-                                    // In Black List / White List mode: server is online (TCP handshake confirmed)
-                                    // Keep it so working nodes are not lost if 204 timed out or filtered by carrier
-                                    isAlive = true
-                                    finalPing = preTcpPing
-                                    services.add("PORT")
                                 }
-                            } else {
-                                // Protocol without Xray JSON (e.g. Hysteria 2 / Hy2)
+                            }
+                        } else if (item.scheme in listOf("hysteria2", "hy2")) {
+                            // Protocol without Xray JSON (or fallback)
+                            val hyPing = probeTcpPing(item.host, item.port, (timeoutSec * 1000).toInt())
+                            if (hyPing > 0) {
                                 isAlive = true
-                                finalPing = preTcpPing
-                                services.add(if (item.scheme.contains("hy")) "HY2" else "ONLINE")
+                                finalPing = hyPing
+                                services.add("HY2")
                             }
                         }
 
+                        // STRICT CRITERIA:
+                        // МИКС mode (strict4Services): must pass all 4 services (YT, TG, GPT, GEM)
+                        // ЧС / БС mode (!strict4Services): must pass real proxy tunnel (services.isNotEmpty() && isAlive)
                         val passesFilter = if (strict4Services) {
-                            isAlive && services.size >= 4
+                            isAlive && services.contains("YT") && services.contains("TG") && services.contains("GPT") && services.contains("GEM")
                         } else {
-                            isAlive
+                            isAlive && services.isNotEmpty()
                         }
 
                         val processed = processedCounter.incrementAndGet()
                         if (passesFilter) {
                             aliveCounter.incrementAndGet()
+                            val (geoCode, countryName) = GeoIpManager.resolveCountry(item)
+                            val flag = GeoIpManager.getFlagEmoji(geoCode)
+
+                            val result = CheckResult(
+                                item = item,
+                                ok = true,
+                                speedMs = finalPing,
+                                tags = services,
+                                countryCode = geoCode,
+                                countryName = countryName,
+                                flag = flag
+                            )
+
+                            synchronized(listLock) {
+                                verifiedList.add(result)
+                            }
                         } else {
                             deadCounter.incrementAndGet()
                         }
 
-                        val elapsedSec = max(0.1f, (System.currentTimeMillis() - startTime) / 1000f)
+                        val now = System.currentTimeMillis()
+                        val elapsedSec = max(0.1f, (now - startTime) / 1000f)
                         val rate = processed / elapsedSec
 
+                        // Throttled UI status updates
                         _stats.value = CheckerStats(
                             total = total,
                             processed = processed,
@@ -184,61 +203,55 @@ class CheckEngine {
                             currentBatch = "${item.scheme.uppercase()} ${item.host}:${item.port}"
                         )
 
-                        if (passesFilter) {
-                            val (geoCode, countryName) = GeoIpManager.resolveCountry(item)
-                            val flag = GeoIpManager.getFlagEmoji(geoCode)
-
-                            CheckResult(
-                                item = item,
-                                ok = true,
-                                speedMs = finalPing,
-                                tags = services,
-                                countryCode = geoCode,
-                                countryName = countryName,
-                                flag = flag
-                            )
-                        } else {
-                            null
+                        // Throttled results list emission (every 500ms) to keep Compose UI butter-smooth
+                        if (now - lastUiUpdateMs > 500) {
+                            lastUiUpdateMs = now
+                            publishFormattedResults(verifiedList, listLock, mode)
                         }
                     }
                 }
             }
 
-            // Collect completed tasks
-            tasks.forEach { task ->
-                val res = task.await()
-                if (res != null) {
-                    synchronized(verifiedList) {
-                        verifiedList.add(res)
-                        // Sort by real latency
-                        verifiedList.sortBy { it.speedMs }
-                        // Format numbering and bunker remarks
-                        val formattedList = verifiedList.mapIndexed { idx, cr ->
-                            val numStr = if (verifiedList.size < 100) "#%02d".format(idx + 1) else "#%03d".format(idx + 1)
-                            val place = if (cr.countryName.isNotEmpty() && cr.countryName != "Планета 🌐") {
-                                "${cr.countryName} ${cr.flag}".trim()
-                            } else if (cr.flag.isNotEmpty() && cr.flag != "🌐") {
-                                cr.flag
-                            } else {
-                                "Планета 🌐"
-                            }
-                            val svcStr = if (cr.tags.isNotEmpty()) cr.tags.joinToString("×") else "ONLINE"
-                            val pingStr = if (cr.speedMs > 0) "${cr.speedMs}ms" else "—ms"
-                            val remark = "BUNKER ${mode.heart} | $place $numStr | $svcStr | $pingStr"
-                            val finalUri = UriParser.rename(cr.item, remark)
-                            cr.copy(finalRemark = remark, finalUri = finalUri)
-                        }
-                        _results.value = formattedList
-                    }
-                }
-            }
+            workerJobs.joinAll()
+
+            // Final sort and format on completion
+            publishFormattedResults(verifiedList, listLock, mode)
 
             isRunningFlag.set(false)
             _stats.value = _stats.value.copy(
                 isRunning = false,
-                currentBatch = "Проверка завершена! Отобрано ${verifiedList.size} реальных рабочих серверов"
+                currentBatch = "Проверка завершена! Отобрано ${verifiedList.size} реальных рабочих узлов"
             )
         }
+    }
+
+    private fun publishFormattedResults(
+        verifiedList: MutableList<CheckResult>,
+        listLock: Any,
+        mode: ParseMode
+    ) {
+        val snapshot = synchronized(listLock) {
+            verifiedList.sortedBy { it.speedMs }
+        }
+
+        val totalAlive = snapshot.size
+        val formattedList = snapshot.mapIndexed { idx, cr ->
+            val numStr = if (totalAlive < 100) "#%02d".format(idx + 1) else "#%03d".format(idx + 1)
+            val place = if (cr.countryName.isNotEmpty() && cr.countryName != "Планета 🌐") {
+                "${cr.countryName} ${cr.flag}".trim()
+            } else if (cr.flag.isNotEmpty() && cr.flag != "🌐") {
+                cr.flag
+            } else {
+                "Планета 🌐"
+            }
+            val svcStr = if (cr.tags.isNotEmpty()) cr.tags.joinToString("×") else "ONLINE"
+            val pingStr = if (cr.speedMs > 0) "${cr.speedMs}ms" else "—ms"
+            val remark = "BUNKER ${mode.heart} | $place $numStr | $svcStr | $pingStr"
+            val finalUri = UriParser.rename(cr.item, remark)
+            cr.copy(finalRemark = remark, finalUri = finalUri)
+        }
+
+        _results.value = formattedList
     }
 
     private fun probeTcpPing(host: String, port: Int, timeoutMs: Int): Long {

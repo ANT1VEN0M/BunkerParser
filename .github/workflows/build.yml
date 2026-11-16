@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Release Tag (e.g. v1.2.3)'
+        description: 'Release Tag (e.g. v1.2.4)'
         required: false
-        default: 'v1.2.3'
+        default: 'v1.2.4'
         type: string
   push:
     branches:
@@ -57,29 +57,29 @@ jobs:
     - name: Prepare Dist
       run: |
         mkdir -p dist
-        find app/build/outputs/apk/release -type f -name "*.apk" -exec cp {} dist/BunkerParser-v1.2.3.apk \;
+        find app/build/outputs/apk/release -type f -name "*.apk" -exec cp {} dist/BunkerParser-v1.2.4.apk \;
         ls -la dist/
 
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: BunkerParser-v1.2.3
-        path: dist/BunkerParser-v1.2.3.apk
+        name: BunkerParser-v1.2.4
+        path: dist/BunkerParser-v1.2.4.apk
 
     - name: Create or Update GitHub Release
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: ${{ github.event.inputs.release_tag || 'v1.2.3' }}
-        name: "Bunker Parser v1.2.3 (Full-Page Scrolling, Sticky Export Dock, All Formats Support)"
+        tag_name: ${{ github.event.inputs.release_tag || 'v1.2.4' }}
+        name: "Bunker Parser v1.2.4 (Real Xray Core Engine, 4 Services YT×TG×GPT×GEM, Anti-Crash Worker Pool)"
         draft: false
         prerelease: false
         make_latest: true
         body: |
-          ⚡ **BUNKER PARSER v1.2.3 ДЛЯ ANDROID** 🐈‍⬛
+          ⚡ **BUNKER PARSER v1.2.4 ДЛЯ ANDROID** 🐈‍⬛
 
           Большое обновление интерфейса и всеядного чекера узлов!
 
-          🛠 **Что нового в v1.2.3:**
+          🛠 **Что нового в v1.2.4:**
           - 📜 **Скроллинг всего экрана:** весь экран теперь представляет собой единый плавный список. Все блоки (HUD, Аналитика со всеми 20+ странами и карточки результатов) прокручиваются от самого верха до низа без обрезания.
           - 📥 **Плавающая кибер-панель (Sticky Export Dock):** кнопки «КОПИЯ TXT», «СКАЧАТЬ» (в папку Downloads) и «Поделиться» закреплены внизу экрана поверх интерфейса — результат можно забрать в 1 клик в любой момент!
           - 🌐 **Честный тест всех протоколов (VLESS, VMess, Trojan, Shadowsocks, Hysteria2):**
@@ -96,4 +96,4 @@ jobs:
           🌐 Официальный сайт: https://kotxantidot.github.io/Mysite/
           👑 Создатель: @k0tlux
         files: |
-          dist/BunkerParser-v1.2.3.apk
+          dist/BunkerParser-v1.2.4.apk
