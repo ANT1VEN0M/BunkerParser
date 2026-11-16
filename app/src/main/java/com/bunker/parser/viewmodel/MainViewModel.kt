@@ -12,6 +12,7 @@ import android.provider.MediaStore
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.bunker.parser.core.CheckEngine
+import com.bunker.parser.core.CoreNativeManager
 import com.bunker.parser.core.UriParser
 import com.bunker.parser.model.CheckItem
 import com.bunker.parser.model.CheckResult
