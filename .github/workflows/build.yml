@@ -1,0 +1,92 @@
+name: Build Bunker Parser APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Release Tag (e.g. v1.0.0)'
+        required: false
+        default: 'v1.0.0'
+        type: string
+  push:
+    branches:
+      - main
+      - master
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: '0'
+
+    - name: Setup Java 21
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '21'
+
+    - name: Setup Android SDK
+      uses: android-actions/setup-android@v4
+      with:
+        log-accepted-android-sdk-licenses: false
+        cmdline-tools-version: '14742923'
+        packages: 'platforms;android-35 build-tools;35.0.0 platform-tools'
+
+    - name: Make gradlew executable
+      run: chmod +x gradlew
+
+    - name: Build APK with Gradle
+      run: |
+        echo "sdk.dir=${ANDROID_HOME}" > local.properties
+        ./gradlew assembleRelease --stacktrace
+
+    - name: Prepare Dist
+      run: |
+        mkdir -p dist
+        find app/build/outputs/apk/release -type f -name "*.apk" -exec cp {} dist/BunkerParser-v1.0.0.apk \;
+        ls -la dist/
+
+    - name: Upload APK Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: BunkerParser-v1.0.0
+        path: dist/BunkerParser-v1.0.0.apk
+
+    - name: Create or Update GitHub Release
+      uses: softprops/action-gh-release@v2
+      with:
+        tag_name: ${{ github.event.inputs.release_tag || 'v1.0.0' }}
+        name: "Bunker Parser v1.0.0 (Cyber Edition)"
+        draft: false
+        prerelease: false
+        make_latest: true
+        body: |
+          ⚡ **BUNKER PARSER v1.0.0 ДЛЯ ANDROID** 🐈‍⬛
+
+          Автономный мобильный чекер и парсер подписок для Android без необходимости в Termux, Python или рут-правах.
+
+          ✨ **Возможности:**
+          - ⚡ **Режим МИКС (BLWL_MIX.txt):** глубокая проверка сервисов YouTube + Telegram + ChatGPT + Gemini. Строгий отбор узлов 4/4!
+          - 🖤 **Режим Черный Список (BLACK_LIST.txt):** отбор узлов для прямого обхода блокировок в РФ.
+          - 🤍 **Режим Белый Список (WHITE_LIST.txt):** отбор нод под мобильные белые списки операторов.
+          - 🌐 **Встроенная GeoIP база (250 стран):** автоматическое определение страны на русском языке и эмодзи-флага.
+          - 🚀 **Многопоточный движок TCP/TLS:** настраиваемое количество потоков (10–80) и сверхточный таймаут.
+          - 📊 **Cyber HUD:** живой спидометр (нод/сек), счётчики Живых 🟢 и Мёртвых 🔴, прогресс-бар в реальном времени.
+          - 💾 **Экспорт в 1 тап:** сохранение готового `.txt` файла прямо в папку `Downloads`, копирование в буфер обмена или шеринг.
+          - 🎨 **Киберпанк интерфейс Jetpack Compose:** Material 3, фирменные неоновые фиолетовые и бирюзовые акценты Бункера.
+
+          ---
+          💬 Чат сообщества: https://t.me/BUNKER_K0TA
+          📢 Канал Бункера: https://t.me/BUNKER_KOTA
+          🤖 Telegram Бот: @BunkerCatOSBot
+          🌐 Официальный сайт: https://kotxantidot.github.io/Mysite/
+          👑 Создатель: @k0tlux
+        files: |
+          dist/BunkerParser-v1.0.0.apk
