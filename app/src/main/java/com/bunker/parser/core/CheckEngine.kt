@@ -36,7 +36,7 @@ class CheckEngine {
     suspend fun start(
         items: List<CheckItem>,
         mode: ParseMode,
-        strict4Services: Boolean,
+        minServices: Int = 1,
         workers: Int = 12,
         timeoutSec: Float = 4.0f
     ) = withContext(Dispatchers.IO) {
@@ -62,7 +62,7 @@ class CheckEngine {
             dead = 0,
             ratePerSec = 0f,
             isRunning = true,
-            currentBatch = "Старт проверки Xray Core..."
+            currentBatch = "Старт мульти-сервисной проверки Xray Core..."
         )
 
         engineJob = launch {
@@ -70,7 +70,7 @@ class CheckEngine {
             val listLock = Any()
             var lastUiUpdateMs = System.currentTimeMillis()
 
-            // Producer: sends items into channel sequentially (zero heap explosion)
+            // Producer: sends items into channel sequentially (zero memory explosion)
             launch(Dispatchers.IO) {
                 for (item in items) {
                     if (!isRunningFlag.get()) break
@@ -79,7 +79,7 @@ class CheckEngine {
                 channel.close()
             }
 
-            // Fixed worker pool: only workerPoolSize coroutines exist simultaneously
+            // Fixed worker pool: only workerPoolSize coroutines run simultaneously
             val workerJobs = (1..workerPoolSize).map {
                 launch(Dispatchers.IO) {
                     for (item in channel) {
@@ -94,60 +94,72 @@ class CheckEngine {
                             // Quick TCP pre-check (1000ms timeout) to drop completely dead IP/ports immediately
                             val preTcp = probeTcpPing(item.host, item.port, 1000)
                             if (preTcp > 0) {
-                                // ── STEP 1: Real proxy tunnel check via Xray Core ──
-                                // Test YouTube endpoint
-                                var ytPing = CoreNativeManager.measureOutboundDelay(
+                                val pings = mutableListOf<Long>()
+
+                                // ── 1. Проверка YouTube ──
+                                val ytPing = CoreNativeManager.measureOutboundDelay(
                                     configJson,
                                     "https://www.youtube.com/generate_204"
                                 )
-                                if (ytPing <= 0) {
-                                    // Secondary check against Google / Cloudflare
-                                    ytPing = CoreNativeManager.measureOutboundDelay(
+                                if (ytPing > 0) {
+                                    services.add("YT")
+                                    pings.add(ytPing)
+                                }
+
+                                // ── 2. Проверка Telegram ──
+                                val tgPing = CoreNativeManager.measureOutboundDelay(
+                                    configJson,
+                                    "https://telegram.org/"
+                                )
+                                if (tgPing > 0) {
+                                    services.add("TG")
+                                    pings.add(tgPing)
+                                }
+
+                                // ── 3. Проверка ChatGPT ──
+                                val gptPing = CoreNativeManager.measureOutboundDelay(
+                                    configJson,
+                                    "https://chatgpt.com/robots.txt"
+                                )
+                                if (gptPing > 0) {
+                                    services.add("GPT")
+                                    pings.add(gptPing)
+                                }
+
+                                // ── 4. Проверка Gemini ──
+                                val gemPing = CoreNativeManager.measureOutboundDelay(
+                                    configJson,
+                                    "https://gemini.google.com/robots.txt"
+                                )
+                                if (gemPing > 0) {
+                                    services.add("GEM")
+                                    pings.add(gemPing)
+                                }
+
+                                if (services.isNotEmpty()) {
+                                    isAlive = true
+                                    finalPing = pings.average().toLong()
+                                } else {
+                                    // Если ни один из 4 специфичных сервисов не открылся, проверяем общий выход в интернет
+                                    var genPing = CoreNativeManager.measureOutboundDelay(
                                         configJson,
                                         "https://www.google.com/generate_204"
                                     )
-                                }
-
-                                if (ytPing > 0) {
-                                    isAlive = true
-                                    services.add("YT")
-                                    val pings = mutableListOf(ytPing)
-
-                                    // ── STEP 2: Probe Telegram ──
-                                    val tgPing = CoreNativeManager.measureOutboundDelay(
-                                        configJson,
-                                        "https://telegram.org/"
-                                    )
-                                    if (tgPing > 0) {
-                                        services.add("TG")
-                                        pings.add(tgPing)
+                                    if (genPing <= 0) {
+                                        genPing = CoreNativeManager.measureOutboundDelay(
+                                            configJson,
+                                            "https://cp.cloudflare.com/generate_204"
+                                        )
                                     }
-
-                                    // ── STEP 3: Probe ChatGPT ──
-                                    val gptPing = CoreNativeManager.measureOutboundDelay(
-                                        configJson,
-                                        "https://chatgpt.com/robots.txt"
-                                    )
-                                    if (gptPing > 0) {
-                                        services.add("GPT")
-                                        pings.add(gptPing)
+                                    if (genPing > 0) {
+                                        isAlive = true
+                                        services.add("TUNNEL")
+                                        finalPing = genPing
                                     }
-
-                                    // ── STEP 4: Probe Gemini ──
-                                    val gemPing = CoreNativeManager.measureOutboundDelay(
-                                        configJson,
-                                        "https://gemini.google.com/robots.txt"
-                                    )
-                                    if (gemPing > 0) {
-                                        services.add("GEM")
-                                        pings.add(gemPing)
-                                    }
-
-                                    finalPing = pings.average().toLong()
                                 }
                             }
                         } else if (item.scheme in listOf("hysteria2", "hy2")) {
-                            // Protocol without Xray JSON (or fallback)
+                            // Протокол Hysteria2
                             val hyPing = probeTcpPing(item.host, item.port, (timeoutSec * 1000).toInt())
                             if (hyPing > 0) {
                                 isAlive = true
@@ -156,14 +168,13 @@ class CheckEngine {
                             }
                         }
 
-                        // STRICT CRITERIA:
-                        // МИКС mode (strict4Services): must pass all 4 services (YT, TG, GPT, GEM)
-                        // ЧС / БС mode (!strict4Services): must pass real proxy tunnel (services.isNotEmpty() && isAlive)
-                        val passesFilter = if (strict4Services) {
-                            isAlive && services.contains("YT") && services.contains("TG") && services.contains("GPT") && services.contains("GEM")
-                        } else {
-                            isAlive && services.isNotEmpty()
-                        }
+                        // УСЛОВИЕ ПРОХОЖДЕНИЯ:
+                        // 1. Узел должен быть реально живым (isAlive)
+                        // 2. Должен иметь хотя бы 1 работающий сервис (services.isNotEmpty) — узлы которые "никуда не заходят" отсекаются!
+                        // 3. Количество работающих сервисов должно удовлетворять minServices (1, 2, 3 или 4)
+                        val passesFilter = isAlive && services.isNotEmpty() && (
+                            services.size >= minServices || (services.contains("TUNNEL") && minServices <= 1)
+                        )
 
                         val processed = processedCounter.incrementAndGet()
                         if (passesFilter) {
@@ -203,7 +214,7 @@ class CheckEngine {
                             currentBatch = "${item.scheme.uppercase()} ${item.host}:${item.port}"
                         )
 
-                        // Throttled results list emission (every 500ms) to keep Compose UI butter-smooth
+                        // Throttled results list emission (every 500ms)
                         if (now - lastUiUpdateMs > 500) {
                             lastUiUpdateMs = now
                             publishFormattedResults(verifiedList, listLock, mode)
@@ -231,7 +242,13 @@ class CheckEngine {
         mode: ParseMode
     ) {
         val snapshot = synchronized(listLock) {
-            verifiedList.sortedBy { it.speedMs }
+            // Элитная сортировка:
+            // Сначала идут ноды с наибольшим количеством сервисов (4/4 -> 3 -> 2 -> 1),
+            // а внутри одной категории — самые быстрые по пингу!
+            verifiedList.sortedWith(
+                compareByDescending<CheckResult> { it.tags.size }
+                    .thenBy { if (it.speedMs > 0) it.speedMs else Long.MAX_VALUE }
+            )
         }
 
         val totalAlive = snapshot.size

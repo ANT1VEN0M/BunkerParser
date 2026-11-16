@@ -92,6 +92,7 @@ fun MainScreen(
 ) {
     val context = LocalContext.current
     val selectedMode by viewModel.selectedMode.collectAsState()
+    val minServices by viewModel.minServices.collectAsState()
     val strictAll4 by viewModel.strictAll4.collectAsState()
     val workers by viewModel.workers.collectAsState()
     val timeoutSec by viewModel.timeoutSeconds.collectAsState()
@@ -198,7 +199,7 @@ fun MainScreen(
                                         .padding(horizontal = 6.dp, vertical = 2.dp)
                                 ) {
                                     Text(
-                                        text = "v1.2.4",
+                                        text = "v1.2.5",
                                         color = BunkerBg,
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold,
@@ -288,6 +289,95 @@ fun MainScreen(
                 }
             }
 
+            // Item 2.5: Multi-tier Service Filter Selector
+            item {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(BunkerSurface)
+                        .border(1.dp, BunkerCardBorder, RoundedCornerShape(12.dp))
+                        .padding(10.dp)
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 2.dp, vertical = 2.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "ФИЛЬТР СЕРВИСОВ",
+                            color = TextSecondary,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            letterSpacing = 0.8.sp
+                        )
+                        Text(
+                            text = when (minServices) {
+                                1 -> "1+ (Все живые связки)"
+                                2 -> "2+ (Дуэты и выше)"
+                                3 -> "3+ (Трио и 4/4)"
+                                else -> "4/4 (Строгий YT×TG×GPT×GEM)"
+                            },
+                            color = when (minServices) {
+                                1 -> NeonGreen
+                                2 -> NeonCyan
+                                3 -> NeonPurple
+                                else -> Color(0xFFFFB800)
+                            },
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        val filterTiers = listOf(
+                            1 to "1+ Все",
+                            2 to "2+ Связки",
+                            3 to "3+ Трио",
+                            4 to "4/4 Строго"
+                        )
+                        filterTiers.forEach { (count, label) ->
+                            val isSelected = minServices == count
+                            val activeColor = when (count) {
+                                1 -> NeonGreen
+                                2 -> NeonCyan
+                                3 -> NeonPurple
+                                else -> Color(0xFFFFB800)
+                            }
+                            Box(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(if (isSelected) activeColor.copy(alpha = 0.2f) else BunkerSurfaceVariant)
+                                    .border(
+                                        1.dp,
+                                        if (isSelected) activeColor else BunkerCardBorder,
+                                        RoundedCornerShape(8.dp)
+                                    )
+                                    .clickable { viewModel.setMinServices(count) }
+                                    .padding(vertical = 7.dp),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Text(
+                                    text = label,
+                                    color = if (isSelected) activeColor else TextSecondary,
+                                    fontSize = 11.sp,
+                                    fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             // Item 3: Settings collapsible panel
             item {
                 AnimatedVisibility(visible = showSettings) {
@@ -345,7 +435,7 @@ fun MainScreen(
                             modifier = Modifier.padding(vertical = 10.dp)
                         )
 
-                        // Strict 4/4 Toggle
+                        // Min Services Filter in Settings
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             verticalAlignment = Alignment.CenterVertically,
@@ -353,27 +443,44 @@ fun MainScreen(
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(
-                                    text = "Строгий отбор 4/4 сервисов",
+                                    text = "Минимум сервисов для отбора",
                                     color = TextPrimary,
                                     fontSize = 13.sp,
                                     fontWeight = FontWeight.SemiBold
                                 )
                                 Text(
-                                    text = "Только ноды прошедшие YT + TG + ChatGPT + Gemini",
+                                    text = "1..4 сервиса (YT, TG, GPT, GEM). Мёртвые 0 сервисов отсекаются",
                                     color = TextMuted,
                                     fontSize = 11.sp
                                 )
                             }
-                            Switch(
-                                checked = strictAll4,
-                                onCheckedChange = { viewModel.setStrictAll4(it) },
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = BunkerBg,
-                                    checkedTrackColor = NeonPurple,
-                                    uncheckedThumbColor = TextMuted,
-                                    uncheckedTrackColor = BunkerSurfaceVariant
-                                )
-                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                listOf(1, 2, 3, 4).forEach { count ->
+                                    val isSelected = minServices == count
+                                    val countColor = when (count) {
+                                        1 -> NeonGreen
+                                        2 -> NeonCyan
+                                        3 -> NeonPurple
+                                        else -> Color(0xFFFFB800)
+                                    }
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(if (isSelected) countColor.copy(alpha = 0.25f) else BunkerSurfaceVariant)
+                                            .border(1.dp, if (isSelected) countColor else BunkerCardBorder, RoundedCornerShape(6.dp))
+                                            .clickable { viewModel.setMinServices(count) }
+                                            .padding(horizontal = 8.dp, vertical = 5.dp)
+                                    ) {
+                                        Text(
+                                            text = if (count == 4) "4/4" else "$count+",
+                                            color = if (isSelected) countColor else TextSecondary,
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            fontFamily = FontFamily.Monospace
+                                        )
+                                    }
+                                }
+                            }
                         }
 
                         HorizontalDivider(

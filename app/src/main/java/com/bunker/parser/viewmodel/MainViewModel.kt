@@ -36,7 +36,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _selectedMode = MutableStateFlow(ParseMode.MIX)
     val selectedMode: StateFlow<ParseMode> = _selectedMode.asStateFlow()
 
-    private val _strictAll4 = MutableStateFlow(true)
+    private val _minServices = MutableStateFlow(1)
+    val minServices: StateFlow<Int> = _minServices.asStateFlow()
+
+    private val _strictAll4 = MutableStateFlow(false)
     val strictAll4: StateFlow<Boolean> = _strictAll4.asStateFlow()
 
     private val _workers = MutableStateFlow(12)
@@ -111,11 +114,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setMode(mode: ParseMode) {
         _selectedMode.value = mode
+        _minServices.value = mode.defaultMinServices
         _strictAll4.value = mode.defaultStrict4
+    }
+
+    fun setMinServices(count: Int) {
+        val coerced = count.coerceIn(1, 4)
+        _minServices.value = coerced
+        _strictAll4.value = (coerced >= 4)
     }
 
     fun setStrictAll4(value: Boolean) {
         _strictAll4.value = value
+        _minServices.value = if (value) 4 else 1
     }
 
     fun setWorkers(count: Int) {
@@ -180,7 +191,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             checkEngine.start(
                 items = items,
                 mode = _selectedMode.value,
-                strict4Services = _strictAll4.value,
+                minServices = _minServices.value,
                 workers = _workers.value,
                 timeoutSec = _timeoutSeconds.value
             )

@@ -76,6 +76,50 @@ fun AnalyticsBlock(
         counts.toList().sortedByDescending { it.second }
     }
 
+    // Service Tiers (4/4, 3/4, 2/4, 1/4)
+    val serviceTiers = remember(results) {
+        var count4 = 0
+        var count3 = 0
+        var count2 = 0
+        var count1 = 0
+        results.forEach { cr ->
+            val realServices = cr.tags.filter { it in listOf("YT", "TG", "GPT", "GEM") }
+            when (realServices.size) {
+                4 -> count4++
+                3 -> count3++
+                2 -> count2++
+                1 -> count1++
+                else -> if (cr.tags.isNotEmpty()) count1++
+            }
+        }
+        listOf(
+            Triple("4/4 (YT×TG×GPT×GEM)", count4, NeonPurple),
+            Triple("3 сервиса (Трио)", count3, NeonCyan),
+            Triple("2 сервиса (Связки)", count2, NeonAmber),
+            Triple("1 сервис", count1, NeonGreen)
+        ).filter { it.second > 0 }
+    }
+
+    // Service Reach (individual service counts)
+    val serviceReach = remember(results) {
+        var yt = 0
+        var tg = 0
+        var gpt = 0
+        var gem = 0
+        results.forEach { cr ->
+            if (cr.tags.contains("YT")) yt++
+            if (cr.tags.contains("TG")) tg++
+            if (cr.tags.contains("GPT")) gpt++
+            if (cr.tags.contains("GEM")) gem++
+        }
+        listOf(
+            "YT" to yt,
+            "TG" to tg,
+            "GPT" to gpt,
+            "GEM" to gem
+        ).filter { it.second > 0 }
+    }
+
     Box(
         modifier = modifier
             .fillMaxWidth()
@@ -111,6 +155,34 @@ fun AnalyticsBlock(
             }
 
             Spacer(modifier = Modifier.height(10.dp))
+
+            // Service Tiers Section
+            if (serviceTiers.isNotEmpty()) {
+                Text(
+                    text = "СВЯЗКИ И ДОСТУПНОСТЬ СЕРВИСОВ",
+                    color = TextSecondary,
+                    fontSize = 10.sp,
+                    fontWeight = FontWeight.SemiBold,
+                    letterSpacing = 0.8.sp
+                )
+                Spacer(modifier = Modifier.height(6.dp))
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    serviceTiers.forEach { (label, count, color) ->
+                        ServiceTierChip(label = label, count = count, color = color)
+                    }
+                    serviceReach.forEach { (service, count) ->
+                        SingleServiceChip(service = service, count = count)
+                    }
+                }
+
+                HorizontalDivider(
+                    color = BunkerCardBorder,
+                    modifier = Modifier.padding(vertical = 10.dp)
+                )
+            }
 
             // Protocols Section
             Text(
@@ -161,6 +233,75 @@ fun AnalyticsBlock(
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun ServiceTierChip(
+    label: String,
+    count: Int,
+    color: Color
+) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(BunkerSurfaceVariant)
+            .border(1.dp, color.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+            .padding(horizontal = 8.dp, vertical = 4.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = label,
+            color = color,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.Monospace
+        )
+        Spacer(modifier = Modifier.width(6.dp))
+        Box(
+            modifier = Modifier
+                .clip(RoundedCornerShape(4.dp))
+                .background(color.copy(alpha = 0.2f))
+                .padding(horizontal = 5.dp, vertical = 1.dp)
+        ) {
+            Text(
+                text = count.toString(),
+                color = TextPrimary,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace
+            )
+        }
+    }
+}
+
+@Composable
+private fun SingleServiceChip(
+    service: String,
+    count: Int
+) {
+    Row(
+        modifier = Modifier
+            .clip(RoundedCornerShape(8.dp))
+            .background(BunkerSurfaceVariant)
+            .border(1.dp, BunkerCardBorder, RoundedCornerShape(8.dp))
+            .padding(horizontal = 7.dp, vertical = 3.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Text(
+            text = "$service ✓",
+            color = NeonGreen,
+            fontSize = 10.sp,
+            fontWeight = FontWeight.SemiBold,
+            fontFamily = FontFamily.Monospace
+        )
+        Spacer(modifier = Modifier.width(4.dp))
+        Text(
+            text = count.toString(),
+            color = TextSecondary,
+            fontSize = 10.sp,
+            fontFamily = FontFamily.Monospace
+        )
     }
 }
 

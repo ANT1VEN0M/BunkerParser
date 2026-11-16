@@ -11,8 +11,8 @@ android {
         applicationId = "com.bunker.parser"
         minSdk = 26
         targetSdk = 37
-        versionCode = 7
-        versionName = "1.2.4"
+        versionCode = 8
+        versionName = "1.2.5"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
