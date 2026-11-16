@@ -199,7 +199,7 @@ fun MainScreen(
                                         .padding(horizontal = 6.dp, vertical = 2.dp)
                                 ) {
                                     Text(
-                                        text = "v1.2.5",
+                                        text = "v1.2.6",
                                         color = BunkerBg,
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold,
@@ -493,14 +493,14 @@ fun MainScreen(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Text("Параллельные потоки", color = TextSecondary, fontSize = 12.sp)
+                            Text("Параллельные потоки (Turbo)", color = TextSecondary, fontSize = 12.sp)
                             Text("$workers потоков", color = NeonCyan, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                         Slider(
                             value = workers.toFloat(),
                             onValueChange = { viewModel.setWorkers(it.toInt()) },
-                            valueRange = 1f..16f,
-                            steps = 14,
+                            valueRange = 8f..64f,
+                            steps = 13,
                             colors = SliderDefaults.colors(
                                 thumbColor = NeonCyan,
                                 activeTrackColor = NeonCyan,
@@ -519,8 +519,8 @@ fun MainScreen(
                         Slider(
                             value = timeoutSec,
                             onValueChange = { viewModel.setTimeout(it) },
-                            valueRange = 2.0f..8.0f,
-                            steps = 11,
+                            valueRange = 1.0f..5.0f,
+                            steps = 7,
                             colors = SliderDefaults.colors(
                                 thumbColor = NeonPurple,
                                 activeTrackColor = NeonPurple,

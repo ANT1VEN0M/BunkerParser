@@ -42,10 +42,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val _strictAll4 = MutableStateFlow(false)
     val strictAll4: StateFlow<Boolean> = _strictAll4.asStateFlow()
 
-    private val _workers = MutableStateFlow(12)
+    private val _workers = MutableStateFlow(32)
     val workers: StateFlow<Int> = _workers.asStateFlow()
 
-    private val _timeoutSeconds = MutableStateFlow(4.5f)
+    private val _timeoutSeconds = MutableStateFlow(2.5f)
     val timeoutSeconds: StateFlow<Float> = _timeoutSeconds.asStateFlow()
 
     private val _parsedItems = MutableStateFlow<List<CheckItem>>(emptyList())
@@ -130,11 +130,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun setWorkers(count: Int) {
-        _workers.value = count
+        _workers.value = count.coerceIn(4, 64)
     }
 
     fun setTimeout(seconds: Float) {
-        _timeoutSeconds.value = seconds
+        _timeoutSeconds.value = seconds.coerceIn(1.0f, 6.0f)
     }
 
     fun loadFromText(rawText: String) {

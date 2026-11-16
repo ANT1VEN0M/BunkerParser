@@ -9,8 +9,10 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.net.Socket
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.math.max
@@ -25,6 +27,9 @@ class CheckEngine {
     private val isRunningFlag = AtomicBoolean(false)
     private var engineJob: Job? = null
 
+    // DNS Cache to eliminate repeated DNS queries across thousands of nodes
+    private val dnsCache = ConcurrentHashMap<String, InetAddress?>()
+
     fun isRunning(): Boolean = isRunningFlag.get()
 
     fun stop() {
@@ -33,12 +38,38 @@ class CheckEngine {
         _stats.value = _stats.value.copy(isRunning = false)
     }
 
+    private fun resolveHostSafely(host: String): InetAddress? {
+        if (host.isEmpty()) return null
+        return dnsCache.computeIfAbsent(host) {
+            try {
+                InetAddress.getByName(it)
+            } catch (_: Throwable) {
+                null
+            }
+        }
+    }
+
+    private fun probeTcpPing(host: String, port: Int, timeoutMs: Int): Long {
+        val inetAddr = resolveHostSafely(host) ?: return -1L
+        val started = System.currentTimeMillis()
+        return try {
+            Socket().use { socket ->
+                socket.tcpNoDelay = true
+                socket.soTimeout = timeoutMs
+                socket.connect(InetSocketAddress(inetAddr, port), timeoutMs)
+                System.currentTimeMillis() - started
+            }
+        } catch (_: Throwable) {
+            -1L
+        }
+    }
+
     suspend fun start(
         items: List<CheckItem>,
         mode: ParseMode,
         minServices: Int = 1,
-        workers: Int = 12,
-        timeoutSec: Float = 4.0f
+        workers: Int = 32,
+        timeoutSec: Float = 2.5f
     ) = withContext(Dispatchers.IO) {
         if (items.isEmpty()) return@withContext
         stop()
@@ -53,7 +84,7 @@ class CheckEngine {
         val deadCounter = AtomicInteger(0)
 
         val startTime = System.currentTimeMillis()
-        val workerPoolSize = workers.coerceIn(1, 24)
+        val workerPoolSize = workers.coerceIn(4, 64)
 
         _stats.value = CheckerStats(
             total = total,
@@ -62,7 +93,7 @@ class CheckEngine {
             dead = 0,
             ratePerSec = 0f,
             isRunning = true,
-            currentBatch = "Старт мульти-сервисной проверки Xray Core..."
+            currentBatch = "Старт Turbo проверки Xray Core ($workerPoolSize потоков)..."
         )
 
         engineJob = launch {
@@ -70,7 +101,7 @@ class CheckEngine {
             val listLock = Any()
             var lastUiUpdateMs = System.currentTimeMillis()
 
-            // Producer: sends items into channel sequentially (zero memory explosion)
+            // Producer: sends items into channel sequentially
             launch(Dispatchers.IO) {
                 for (item in items) {
                     if (!isRunningFlag.get()) break
@@ -91,76 +122,108 @@ class CheckEngine {
                         val services = mutableListOf<String>()
 
                         if (configJson != null) {
-                            // Quick TCP pre-check (1000ms timeout) to drop completely dead IP/ports immediately
-                            val preTcp = probeTcpPing(item.host, item.port, 1000)
+                            // ── ШАГ 1: Сверхбыстрый TCP pre-check (400ms) ──
+                            // Отсекает 95% мёртвых хостов практически мгновенно
+                            val preTcp = probeTcpPing(item.host, item.port, 400)
                             if (preTcp > 0) {
                                 val pings = mutableListOf<Long>()
 
-                                // ── 1. Проверка YouTube ──
+                                // ── ШАГ 2: Быстрый тест выхода в сеть через YouTube 204 ──
                                 val ytPing = CoreNativeManager.measureOutboundDelay(
                                     configJson,
                                     "https://www.youtube.com/generate_204"
                                 )
+
                                 if (ytPing > 0) {
+                                    // Узел 100% живой! Добавляем YT
+                                    isAlive = true
                                     services.add("YT")
                                     pings.add(ytPing)
-                                }
 
-                                // ── 2. Проверка Telegram ──
-                                val tgPing = CoreNativeManager.measureOutboundDelay(
-                                    configJson,
-                                    "https://telegram.org/"
-                                )
-                                if (tgPing > 0) {
-                                    services.add("TG")
-                                    pings.add(tgPing)
-                                }
+                                    // Параллельный запуск оставшихся сервисов (TG, GPT, GEM)
+                                    coroutineScope {
+                                        val tgDef = async(Dispatchers.IO) {
+                                            CoreNativeManager.measureOutboundDelay(configJson, "https://telegram.org/")
+                                        }
+                                        val gptDef = async(Dispatchers.IO) {
+                                            CoreNativeManager.measureOutboundDelay(configJson, "https://chatgpt.com/robots.txt")
+                                        }
+                                        val gemDef = async(Dispatchers.IO) {
+                                            CoreNativeManager.measureOutboundDelay(configJson, "https://gemini.google.com/robots.txt")
+                                        }
 
-                                // ── 3. Проверка ChatGPT ──
-                                val gptPing = CoreNativeManager.measureOutboundDelay(
-                                    configJson,
-                                    "https://chatgpt.com/robots.txt"
-                                )
-                                if (gptPing > 0) {
-                                    services.add("GPT")
-                                    pings.add(gptPing)
-                                }
-
-                                // ── 4. Проверка Gemini ──
-                                val gemPing = CoreNativeManager.measureOutboundDelay(
-                                    configJson,
-                                    "https://gemini.google.com/robots.txt"
-                                )
-                                if (gemPing > 0) {
-                                    services.add("GEM")
-                                    pings.add(gemPing)
-                                }
-
-                                if (services.isNotEmpty()) {
-                                    isAlive = true
+                                        val tgPing = tgDef.await()
+                                        if (tgPing > 0) {
+                                            services.add("TG")
+                                            pings.add(tgPing)
+                                        }
+                                        val gptPing = gptDef.await()
+                                        if (gptPing > 0) {
+                                            services.add("GPT")
+                                            pings.add(gptPing)
+                                        }
+                                        val gemPing = gemDef.await()
+                                        if (gemPing > 0) {
+                                            services.add("GEM")
+                                            pings.add(gemPing)
+                                        }
+                                    }
                                     finalPing = pings.average().toLong()
                                 } else {
-                                    // Если ни один из 4 специфичных сервисов не открылся, проверяем общий выход в интернет
-                                    var genPing = CoreNativeManager.measureOutboundDelay(
-                                        configJson,
-                                        "https://www.google.com/generate_204"
-                                    )
-                                    if (genPing <= 0) {
-                                        genPing = CoreNativeManager.measureOutboundDelay(
-                                            configJson,
-                                            "https://cp.cloudflare.com/generate_204"
-                                        )
-                                    }
-                                    if (genPing > 0) {
-                                        isAlive = true
-                                        services.add("TUNNEL")
-                                        finalPing = genPing
+                                    // YouTube не ответил (возможно блок именно YouTube).
+                                    // Проверяем Cloudflare 204 и Telegram параллельно!
+                                    coroutineScope {
+                                        val cfDef = async(Dispatchers.IO) {
+                                            CoreNativeManager.measureOutboundDelay(configJson, "https://cp.cloudflare.com/generate_204")
+                                        }
+                                        val tgDef = async(Dispatchers.IO) {
+                                            CoreNativeManager.measureOutboundDelay(configJson, "https://telegram.org/")
+                                        }
+
+                                        val cfPing = cfDef.await()
+                                        val tgPing = tgDef.await()
+
+                                        if (tgPing > 0) {
+                                            isAlive = true
+                                            services.add("TG")
+                                            pings.add(tgPing)
+                                        }
+
+                                        if (cfPing > 0) {
+                                            isAlive = true
+                                            // Cloudflare доступен! Параллельно опрашиваем ChatGPT и Gemini
+                                            val gptDef = async(Dispatchers.IO) {
+                                                CoreNativeManager.measureOutboundDelay(configJson, "https://chatgpt.com/robots.txt")
+                                            }
+                                            val gemDef = async(Dispatchers.IO) {
+                                                CoreNativeManager.measureOutboundDelay(configJson, "https://gemini.google.com/robots.txt")
+                                            }
+
+                                            val gptPing = gptDef.await()
+                                            if (gptPing > 0) {
+                                                services.add("GPT")
+                                                pings.add(gptPing)
+                                            }
+                                            val gemPing = gemDef.await()
+                                            if (gemPing > 0) {
+                                                services.add("GEM")
+                                                pings.add(gemPing)
+                                            }
+
+                                            if (services.isEmpty()) {
+                                                services.add("TUNNEL")
+                                                pings.add(cfPing)
+                                            }
+                                        }
+
+                                        if (pings.isNotEmpty()) {
+                                            finalPing = pings.average().toLong()
+                                        }
                                     }
                                 }
                             }
                         } else if (item.scheme in listOf("hysteria2", "hy2")) {
-                            // Протокол Hysteria2
-                            val hyPing = probeTcpPing(item.host, item.port, (timeoutSec * 1000).toInt())
+                            val hyPing = probeTcpPing(item.host, item.port, 600)
                             if (hyPing > 0) {
                                 isAlive = true
                                 finalPing = hyPing
@@ -214,8 +277,8 @@ class CheckEngine {
                             currentBatch = "${item.scheme.uppercase()} ${item.host}:${item.port}"
                         )
 
-                        // Throttled results list emission (every 500ms)
-                        if (now - lastUiUpdateMs > 500) {
+                        // Throttled results list emission (every 1000ms) for ultra-smooth UI
+                        if (now - lastUiUpdateMs > 1000) {
                             lastUiUpdateMs = now
                             publishFormattedResults(verifiedList, listLock, mode)
                         }
@@ -269,20 +332,6 @@ class CheckEngine {
         }
 
         _results.value = formattedList
-    }
-
-    private fun probeTcpPing(host: String, port: Int, timeoutMs: Int): Long {
-        val started = System.currentTimeMillis()
-        return try {
-            Socket().use { socket ->
-                socket.tcpNoDelay = true
-                socket.soTimeout = timeoutMs
-                socket.connect(InetSocketAddress(host, port), timeoutMs)
-                System.currentTimeMillis() - started
-            }
-        } catch (_: Exception) {
-            -1L
-        }
     }
 
     fun exportSubscription(results: List<CheckResult>, mode: ParseMode): String {
