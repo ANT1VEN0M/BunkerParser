@@ -110,9 +110,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setMode(mode: ParseMode) {
         _selectedMode.value = mode
-        if (mode == ParseMode.MIX) {
-            _strictAll4.value = true
-        }
+        _strictAll4.value = mode.defaultStrict4
     }
 
     fun setStrictAll4(value: Boolean) {

@@ -17,7 +17,6 @@ object XrayConfigBuilder {
             "vmess" -> buildVmessOutbound(trimmed)
             "trojan" -> buildTrojanOutbound(trimmed)
             "ss" -> buildShadowsocksOutbound(trimmed)
-            "hysteria2", "hy2" -> buildHysteria2Outbound(trimmed)
             else -> null
         } ?: return null
 
@@ -54,17 +53,29 @@ object XrayConfigBuilder {
             val flow = q["flow"].orEmpty()
 
             val outbound = JsonObject().apply {
+                addProperty("tag", "proxy")
                 addProperty("protocol", "vless")
             }
 
-            val settings = JsonObject().apply {
-                addProperty("address", host)
-                addProperty("port", port)
+            // Xray Core VLESS requires vnext -> users
+            val user = JsonObject().apply {
                 addProperty("id", userId)
                 addProperty("encryption", q["encryption"] ?: "none")
                 if (flow.isNotBlank()) {
                     addProperty("flow", flow)
                 }
+            }
+
+            val server = JsonObject().apply {
+                addProperty("address", host)
+                addProperty("port", port)
+                val users = JsonArray().apply { add(user) }
+                add("users", users)
+            }
+
+            val settings = JsonObject().apply {
+                val vnext = JsonArray().apply { add(server) }
+                add("vnext", vnext)
             }
             outbound.add("settings", settings)
 
@@ -101,52 +112,44 @@ object XrayConfigBuilder {
             val sni = obj.get("sni")?.asString?.trim().orEmpty().ifEmpty { hostHeader }.ifEmpty { host }
 
             val outbound = JsonObject().apply {
+                addProperty("tag", "proxy")
                 addProperty("protocol", "vmess")
             }
 
-            val settings = JsonObject().apply {
+            // Xray Core VMess requires vnext -> users
+            val user = JsonObject().apply {
+                addProperty("id", id)
+                addProperty("alterId", obj.get("aid")?.asString?.toIntOrNull() ?: 0)
+                addProperty("security", obj.get("scy")?.asString ?: "auto")
+            }
+
+            val server = JsonObject().apply {
                 addProperty("address", host)
                 addProperty("port", port)
-                addProperty("id", id)
-                addProperty("security", obj.get("scy")?.asString ?: "auto")
+                val users = JsonArray().apply { add(user) }
+                add("users", users)
+            }
+
+            val settings = JsonObject().apply {
+                val vnext = JsonArray().apply { add(server) }
+                add("vnext", vnext)
             }
             outbound.add("settings", settings)
 
-            val stream = JsonObject()
-            val method = when (net) {
-                "ws", "websocket" -> "websocket"
-                "grpc" -> "grpc"
-                "h2", "http" -> "http"
-                else -> "raw"
-            }
-            stream.addProperty("method", method)
+            val q = HashMap<String, String>()
+            if (path.isNotEmpty()) q["path"] = path
+            if (hostHeader.isNotEmpty()) q["host"] = hostHeader
+            if (sni.isNotEmpty()) q["sni"] = sni
 
-            if (method == "websocket") {
-                val ws = JsonObject().apply {
-                    addProperty("path", path.ifEmpty { "/" })
-                    if (hostHeader.isNotEmpty()) addProperty("host", hostHeader)
-                }
-                stream.add("wsSettings", ws)
-            } else if (method == "grpc") {
-                val grpc = JsonObject().apply {
-                    val svc = path.trim('/')
-                    if (svc.isNotEmpty()) addProperty("serviceName", svc)
-                }
-                stream.add("grpcSettings", grpc)
-            }
-
-            if (tls == "tls") {
-                stream.addProperty("security", "tls")
-                val tlsObj = JsonObject().apply {
-                    addProperty("serverName", sni)
-                    addProperty("allowInsecure", true)
-                }
-                stream.add("tlsSettings", tlsObj)
-            } else {
-                stream.addProperty("security", "none")
-            }
-
+            val stream = buildStreamSettings(
+                transport = net,
+                security = if (tls == "tls") "tls" else "none",
+                host = host,
+                port = port,
+                q = q
+            )
             outbound.add("streamSettings", stream)
+
             outbound
         } catch (_: Exception) {
             null
@@ -171,13 +174,20 @@ object XrayConfigBuilder {
             val security = (q["security"] ?: "tls").lowercase()
 
             val outbound = JsonObject().apply {
+                addProperty("tag", "proxy")
                 addProperty("protocol", "trojan")
             }
 
-            val settings = JsonObject().apply {
+            // Xray Core Trojan requires servers array
+            val server = JsonObject().apply {
                 addProperty("address", host)
                 addProperty("port", port)
                 addProperty("password", pass)
+            }
+
+            val settings = JsonObject().apply {
+                val servers = JsonArray().apply { add(server) }
+                add("servers", servers)
             }
             outbound.add("settings", settings)
 
@@ -233,71 +243,25 @@ object XrayConfigBuilder {
             if (host.isEmpty() || method.isEmpty()) return null
 
             val outbound = JsonObject().apply {
+                addProperty("tag", "proxy")
                 addProperty("protocol", "shadowsocks")
             }
 
-            val settings = JsonObject().apply {
+            val server = JsonObject().apply {
                 addProperty("address", host)
                 addProperty("port", port)
                 addProperty("method", method)
                 addProperty("password", password)
             }
-            outbound.add("settings", settings)
-
-            val stream = JsonObject().apply {
-                addProperty("method", "raw")
-            }
-            outbound.add("streamSettings", stream)
-
-            outbound
-        } catch (_: Exception) {
-            null
-        }
-    }
-
-    private fun buildHysteria2Outbound(uri: String): JsonObject? {
-        return try {
-            val (base, _) = splitBaseAndFrag(uri)
-            val withoutScheme = base.substringAfter("://")
-            val password = withoutScheme.substringBefore("@")
-            val hostAndRest = withoutScheme.substringAfter("@")
-            val hostPortStr = hostAndRest.substringBefore("?").substringBefore("/")
-            val queryStr = if (hostAndRest.contains("?")) hostAndRest.substringAfter("?").substringBefore("#") else ""
-
-            val (host, port) = extractHostAndPort(hostPortStr, 443)
-            val pass = URLDecoder.decode(password, "UTF-8").trim()
-            if (host.isEmpty()) return null
-
-            val q = parseQuery(queryStr)
-            val sni = q["sni"]?.ifEmpty { host } ?: host
-
-            val outbound = JsonObject().apply {
-                addProperty("protocol", "hysteria")
-            }
 
             val settings = JsonObject().apply {
-                addProperty("version", 2)
-                addProperty("address", host)
-                addProperty("port", port)
+                val servers = JsonArray().apply { add(server) }
+                add("servers", servers)
             }
             outbound.add("settings", settings)
 
             val stream = JsonObject().apply {
-                addProperty("method", "hysteria")
-                addProperty("security", "tls")
-                val tlsObj = JsonObject().apply {
-                    addProperty("serverName", sni)
-                    addProperty("allowInsecure", true)
-                    val alpn = JsonArray().apply { add("h3") }
-                    add("alpn", alpn)
-                }
-                add("tlsSettings", tlsObj)
-
-                val hyObj = JsonObject().apply {
-                    addProperty("version", 2)
-                    addProperty("auth", pass)
-                }
-                add("hysteriaSettings", hyObj)
+                addProperty("network", "tcp")
             }
             outbound.add("streamSettings", stream)
 
@@ -315,25 +279,30 @@ object XrayConfigBuilder {
         q: Map<String, String>
     ): JsonObject {
         val stream = JsonObject()
-        val method = when (transport) {
-            "ws", "websocket" -> "websocket"
+        val network = when (transport) {
+            "ws", "websocket" -> "ws"
             "httpupgrade" -> "httpupgrade"
             "grpc" -> "grpc"
-            "xhttp" -> "xhttp"
-            "kcp", "mkcp" -> "mkcp"
-            else -> "raw"
+            "xhttp", "splithttp" -> "xhttp"
+            "kcp", "mkcp" -> "kcp"
+            else -> "tcp"
         }
-        stream.addProperty("method", method)
+        stream.addProperty("network", network)
 
         val sni = q["sni"]?.ifEmpty { q["host"] }?.ifEmpty { host } ?: host
         val path = q["path"]?.ifEmpty { "/" } ?: "/"
         val hostHeader = q["host"].orEmpty()
 
-        when (method) {
-            "websocket" -> {
+        when (network) {
+            "ws" -> {
                 val ws = JsonObject().apply {
                     addProperty("path", path)
-                    if (hostHeader.isNotEmpty()) addProperty("host", hostHeader)
+                    if (hostHeader.isNotEmpty()) {
+                        val headers = JsonObject().apply {
+                            addProperty("Host", hostHeader)
+                        }
+                        add("headers", headers)
+                    }
                 }
                 stream.add("wsSettings", ws)
             }
@@ -361,29 +330,45 @@ object XrayConfigBuilder {
                 }
                 stream.add("xhttpSettings", xhttp)
             }
-            "raw" -> {
+            "tcp" -> {
                 if (q["headertype"] == "http") {
-                    val raw = JsonObject()
+                    val tcp = JsonObject()
                     val hdr = JsonObject().apply {
                         addProperty("type", "http")
-                        val req = JsonObject()
-                        val pArr = JsonArray().apply { add(path) }
-                        req.add("path", pArr)
-                        if (hostHeader.isNotEmpty()) {
-                            val hObj = JsonObject()
-                            val hArr = JsonArray().apply { add(hostHeader) }
-                            hObj.add("Host", hArr)
-                            req.add("headers", hObj)
+                        val req = JsonObject().apply {
+                            val pArr = JsonArray().apply { add(path) }
+                            add("path", pArr)
+                            if (hostHeader.isNotEmpty()) {
+                                val hObj = JsonObject().apply {
+                                    val hArr = JsonArray().apply { add(hostHeader) }
+                                    add("Host", hArr)
+                                }
+                                add("headers", hObj)
+                            }
                         }
                         add("request", req)
                     }
-                    raw.add("header", hdr)
-                    stream.add("rawSettings", raw)
+                    tcp.add("header", hdr)
+                    stream.add("tcpSettings", tcp)
                 }
             }
         }
 
         when (security) {
+            "reality" -> {
+                stream.addProperty("security", "reality")
+                val reality = JsonObject().apply {
+                    addProperty("serverName", sni)
+                    addProperty("fingerprint", q["fp"] ?: "chrome")
+                    addProperty("show", false)
+                    addProperty("publicKey", q["pbk"].orEmpty())
+                    addProperty("shortId", q["sid"].orEmpty())
+                    if (q["spx"]?.isNotEmpty() == true) {
+                        addProperty("spiderX", q["spx"])
+                    }
+                }
+                stream.add("realitySettings", reality)
+            }
             "tls", "xtls" -> {
                 stream.addProperty("security", "tls")
                 val tls = JsonObject().apply {
@@ -399,17 +384,6 @@ object XrayConfigBuilder {
                     }
                 }
                 stream.add("tlsSettings", tls)
-            }
-            "reality" -> {
-                stream.addProperty("security", "reality")
-                val reality = JsonObject().apply {
-                    addProperty("serverName", sni)
-                    addProperty("fingerprint", q["fp"] ?: "chrome")
-                    addProperty("password", q["pbk"].orEmpty())
-                    addProperty("shortId", q["sid"].orEmpty())
-                    addProperty("spiderX", q["spx"] ?: "/")
-                }
-                stream.add("realitySettings", reality)
             }
             else -> {
                 stream.addProperty("security", "none")

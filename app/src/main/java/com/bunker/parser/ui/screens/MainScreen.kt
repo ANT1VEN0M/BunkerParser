@@ -196,7 +196,7 @@ fun MainScreen(
                                     .padding(horizontal = 6.dp, vertical = 2.dp)
                             ) {
                                 Text(
-                                    text = "v1.2.1",
+                                    text = "v1.2.2",
                                     color = BunkerBg,
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,

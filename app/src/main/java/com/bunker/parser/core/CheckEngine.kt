@@ -82,53 +82,69 @@ class CheckEngine {
                         val services = mutableListOf<String>()
 
                         if (configJson != null) {
-                            // Step 1: Real proxy verification against YouTube
-                            val ytPing = CoreNativeManager.measureOutboundDelay(
+                            // Step 1: Real proxy verification against Google / Gstatic 204
+                            var ytPing = CoreNativeManager.measureOutboundDelay(
                                 configJson,
-                                "https://www.youtube.com/generate_204"
+                                "https://www.google.com/generate_204"
                             )
+                            if (ytPing <= 0) {
+                                ytPing = CoreNativeManager.measureOutboundDelay(
+                                    configJson,
+                                    "https://www.gstatic.com/generate_204"
+                                )
+                            }
 
                             if (ytPing > 0) {
                                 isAlive = true
                                 services.add("YT")
                                 val pings = mutableListOf(ytPing)
 
-                                // Step 2: Probe Telegram
-                                val tgPing = CoreNativeManager.measureOutboundDelay(
-                                    configJson,
-                                    "https://telegram.org/"
-                                )
-                                if (tgPing > 0) {
-                                    services.add("TG")
-                                    pings.add(tgPing)
-                                }
+                                // Probing additional services if in MIX mode or strict is requested
+                                if (strict4Services || mode == ParseMode.MIX) {
+                                    // Step 2: Probe Telegram
+                                    val tgPing = CoreNativeManager.measureOutboundDelay(
+                                        configJson,
+                                        "https://telegram.org/"
+                                    )
+                                    if (tgPing > 0) {
+                                        services.add("TG")
+                                        pings.add(tgPing)
+                                    }
 
-                                // Step 3: Probe ChatGPT
-                                val gptPing = CoreNativeManager.measureOutboundDelay(
-                                    configJson,
-                                    "https://chatgpt.com/robots.txt"
-                                )
-                                if (gptPing > 0) {
-                                    services.add("GPT")
-                                    pings.add(gptPing)
-                                }
+                                    // Step 3: Probe ChatGPT
+                                    val gptPing = CoreNativeManager.measureOutboundDelay(
+                                        configJson,
+                                        "https://chatgpt.com/robots.txt"
+                                    )
+                                    if (gptPing > 0) {
+                                        services.add("GPT")
+                                        pings.add(gptPing)
+                                    }
 
-                                // Step 4: Probe Gemini
-                                val gemPing = CoreNativeManager.measureOutboundDelay(
-                                    configJson,
-                                    "https://gemini.google.com/robots.txt"
-                                )
-                                if (gemPing > 0) {
-                                    services.add("GEM")
-                                    pings.add(gemPing)
+                                    // Step 4: Probe Gemini
+                                    val gemPing = CoreNativeManager.measureOutboundDelay(
+                                        configJson,
+                                        "https://gemini.google.com/robots.txt"
+                                    )
+                                    if (gemPing > 0) {
+                                        services.add("GEM")
+                                        pings.add(gemPing)
+                                    }
                                 }
 
                                 finalPing = pings.average().toLong()
                             }
+                        } else if (item.scheme == "hysteria2" || item.scheme == "hy2") {
+                            val tcpPing = probeTcpPing(item.host, item.port, timeoutMs.coerceAtMost(3000))
+                            if (tcpPing > 0) {
+                                isAlive = true
+                                finalPing = tcpPing
+                                services.add("HY2")
+                            }
                         }
 
                         // Fallback only if native engine was completely unavailable (e.g. no .so)
-                        if (!isAlive && configJson == null) {
+                        if (!isAlive && configJson == null && item.scheme != "hysteria2" && item.scheme != "hy2") {
                             val tcpPing = probeTcpPing(item.host, item.port, timeoutMs.coerceAtMost(2500))
                             if (tcpPing > 0) {
                                 isAlive = true
