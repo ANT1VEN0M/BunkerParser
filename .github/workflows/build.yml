@@ -45,7 +45,7 @@ jobs:
     - name: Build APK with Gradle
       run: |
         echo "sdk.dir=${ANDROID_HOME}" > local.properties
-        ./gradlew assembleRelease --stacktrace
+        ./gradlew assembleRelease --no-daemon -Dorg.gradle.jvmargs="-Xmx4096m" --stacktrace
 
     - name: Prepare Dist
       run: |
