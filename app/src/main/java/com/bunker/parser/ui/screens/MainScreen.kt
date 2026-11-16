@@ -61,7 +61,6 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.lifecycle.viewmodel.compose.viewModel
 import com.bunker.parser.model.ParseMode
 import com.bunker.parser.ui.components.ConfigCard
 import com.bunker.parser.ui.components.CyberHud
@@ -81,7 +80,7 @@ import com.bunker.parser.viewmodel.MainViewModel
 
 @Composable
 fun MainScreen(
-    viewModel: MainViewModel = viewModel()
+    viewModel: MainViewModel
 ) {
     val context = LocalContext.current
     val selectedMode by viewModel.selectedMode.collectAsState()

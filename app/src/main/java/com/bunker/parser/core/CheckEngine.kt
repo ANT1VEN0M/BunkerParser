@@ -198,6 +198,8 @@ class CheckEngine {
         } else {
             emptyList()
         }
+    }
+
     fun exportSubscription(results: List<CheckResult>, mode: ParseMode): String {
         val sb = StringBuilder()
         mode.formatSubscriptionHeader().forEach { sb.append(it).append("\n") }
