@@ -17,6 +17,7 @@ import com.bunker.parser.model.CheckItem
 import com.bunker.parser.model.CheckResult
 import com.bunker.parser.model.CheckerStats
 import com.bunker.parser.model.ParseMode
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharedFlow
@@ -49,8 +50,63 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val stats: StateFlow<CheckerStats> = checkEngine.stats
     val results: StateFlow<List<CheckResult>> = checkEngine.results
 
+    private val _customBgPath = MutableStateFlow<String?>(null)
+    val customBgPath: StateFlow<String?> = _customBgPath.asStateFlow()
+
     private val _uiEvents = MutableSharedFlow<String>()
     val uiEvents: SharedFlow<String> = _uiEvents.asSharedFlow()
+
+    init {
+        loadSavedBackground()
+    }
+
+    private fun loadSavedBackground() {
+        try {
+            val context = getApplication<Application>()
+            val bgFile = File(context.filesDir, "custom_background.jpg")
+            if (bgFile.exists() && bgFile.length() > 0) {
+                _customBgPath.value = bgFile.absolutePath
+            }
+        } catch (_: Exception) {}
+    }
+
+    fun setCustomBackground(uri: Uri) {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val context = getApplication<Application>()
+                val bgFile = File(context.filesDir, "custom_background.jpg")
+                context.contentResolver.openInputStream(uri)?.use { input ->
+                    FileOutputStream(bgFile).use { output ->
+                        input.copyTo(output)
+                    }
+                }
+                if (bgFile.exists() && bgFile.length() > 0) {
+                    _customBgPath.value = bgFile.absolutePath
+                    _uiEvents.emit("Фон приложения обновлен 🖼️")
+                }
+            } catch (e: Exception) {
+                _uiEvents.emit("Ошибка установки фона: ${e.message}")
+            }
+        }
+    }
+
+    fun resetCustomBackground() {
+        try {
+            val context = getApplication<Application>()
+            val bgFile = File(context.filesDir, "custom_background.jpg")
+            if (bgFile.exists()) {
+                bgFile.delete()
+            }
+            _customBgPath.value = null
+            viewModelScope.launch {
+                _uiEvents.emit("Фон сброшен к стандартному 🖤")
+            }
+        } catch (e: Exception) {
+            viewModelScope.launch {
+                _uiEvents.emit("Ошибка сброса фона: ${e.message}")
+            }
+        }
+    }
 
     fun setMode(mode: ParseMode) {
         _selectedMode.value = mode

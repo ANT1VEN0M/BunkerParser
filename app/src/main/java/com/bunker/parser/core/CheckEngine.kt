@@ -163,7 +163,7 @@ class CheckEngine {
                         )
 
                         if (passesFilter) {
-                            val (geoCode, countryName) = GeoIpManager.resolveHostCountry(item.host)
+                            val (geoCode, countryName) = GeoIpManager.resolveCountry(item)
                             val flag = GeoIpManager.getFlagEmoji(geoCode)
 
                             CheckResult(
@@ -193,7 +193,13 @@ class CheckEngine {
                         // Format numbering and bunker remarks
                         val formattedList = verifiedList.mapIndexed { idx, cr ->
                             val numStr = if (verifiedList.size < 100) "#%02d".format(idx + 1) else "#%03d".format(idx + 1)
-                            val place = if (cr.countryName.isNotEmpty()) "${cr.countryName} ${cr.flag}".trim() else "Планета 🌐"
+                            val place = if (cr.countryName.isNotEmpty() && cr.countryName != "Планета 🌐") {
+                                "${cr.countryName} ${cr.flag}".trim()
+                            } else if (cr.flag.isNotEmpty() && cr.flag != "🌐") {
+                                cr.flag
+                            } else {
+                                "Планета 🌐"
+                            }
                             val svcStr = if (cr.tags.isNotEmpty()) cr.tags.joinToString("×") else "ONLINE"
                             val pingStr = if (cr.speedMs > 0) "${cr.speedMs}ms" else "—ms"
                             val remark = "BUNKER ${mode.heart} | $place $numStr | $svcStr | $pingStr"
