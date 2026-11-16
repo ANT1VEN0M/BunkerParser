@@ -38,7 +38,7 @@ class CheckEngine {
         items: List<CheckItem>,
         mode: ParseMode,
         strict4Services: Boolean,
-        workers: Int = 6,
+        workers: Int = 12,
         timeoutSec: Float = 4.0f
     ) = withContext(Dispatchers.IO) {
         if (items.isEmpty()) return@withContext
@@ -54,7 +54,7 @@ class CheckEngine {
         val deadCounter = AtomicInteger(0)
 
         val startTime = System.currentTimeMillis()
-        val semaphore = Semaphore(workers.coerceIn(1, 16))
+        val semaphore = Semaphore(workers.coerceIn(1, 24))
 
         _stats.value = CheckerStats(
             total = total,
@@ -63,7 +63,7 @@ class CheckEngine {
             dead = 0,
             ratePerSec = 0f,
             isRunning = true,
-            currentBatch = "Старт проверки..."
+            currentBatch = "Старт реальной проверки узлов..."
         )
 
         job = launch {
@@ -74,27 +74,76 @@ class CheckEngine {
                     semaphore.withPermit {
                         if (!isRunningFlag.get()) return@withPermit null
 
-                        val timeoutMs = (timeoutSec * 1000).toInt().coerceIn(1000, 15000)
-                        val ping = probeTcpPing(item.host, item.port, timeoutMs.coerceAtMost(3000))
+                        val timeoutMs = (timeoutSec * 1000).toInt().coerceIn(1000, 10000)
+                        val configJson = XrayConfigBuilder.buildConfig(item.rawUri)
 
-                        val (geoCode, countryName) = GeoIpManager.resolveHostCountry(item.host)
-                        val flag = GeoIpManager.getFlagEmoji(geoCode)
+                        var isAlive = false
+                        var finalPing = 0L
+                        val services = mutableListOf<String>()
 
-                        val services = if (ping > 0) {
-                            probeServices(item, ping, timeoutMs)
-                        } else {
-                            emptyList()
+                        if (configJson != null) {
+                            // Step 1: Real proxy verification against YouTube
+                            val ytPing = CoreNativeManager.measureOutboundDelay(
+                                configJson,
+                                "https://www.youtube.com/generate_204"
+                            )
+
+                            if (ytPing > 0) {
+                                isAlive = true
+                                services.add("YT")
+                                val pings = mutableListOf(ytPing)
+
+                                // Step 2: Probe Telegram
+                                val tgPing = CoreNativeManager.measureOutboundDelay(
+                                    configJson,
+                                    "https://telegram.org/"
+                                )
+                                if (tgPing > 0) {
+                                    services.add("TG")
+                                    pings.add(tgPing)
+                                }
+
+                                // Step 3: Probe ChatGPT
+                                val gptPing = CoreNativeManager.measureOutboundDelay(
+                                    configJson,
+                                    "https://chatgpt.com/robots.txt"
+                                )
+                                if (gptPing > 0) {
+                                    services.add("GPT")
+                                    pings.add(gptPing)
+                                }
+
+                                // Step 4: Probe Gemini
+                                val gemPing = CoreNativeManager.measureOutboundDelay(
+                                    configJson,
+                                    "https://gemini.google.com/robots.txt"
+                                )
+                                if (gemPing > 0) {
+                                    services.add("GEM")
+                                    pings.add(gemPing)
+                                }
+
+                                finalPing = pings.average().toLong()
+                            }
                         }
 
-                        val isAlive = ping > 0
+                        // Fallback only if native engine was completely unavailable (e.g. no .so)
+                        if (!isAlive && configJson == null) {
+                            val tcpPing = probeTcpPing(item.host, item.port, timeoutMs.coerceAtMost(2500))
+                            if (tcpPing > 0) {
+                                isAlive = true
+                                finalPing = tcpPing
+                            }
+                        }
+
                         val passesFilter = if (strict4Services) {
-                            services.size >= 4
+                            isAlive && services.size >= 4
                         } else {
                             isAlive
                         }
 
                         val processed = processedCounter.incrementAndGet()
-                        if (isAlive && passesFilter) {
+                        if (passesFilter) {
                             aliveCounter.incrementAndGet()
                         } else {
                             deadCounter.incrementAndGet()
@@ -113,11 +162,14 @@ class CheckEngine {
                             currentBatch = "${item.scheme.uppercase()} ${item.host}:${item.port}"
                         )
 
-                        if (isAlive && passesFilter) {
+                        if (passesFilter) {
+                            val (geoCode, countryName) = GeoIpManager.resolveHostCountry(item.host)
+                            val flag = GeoIpManager.getFlagEmoji(geoCode)
+
                             CheckResult(
                                 item = item,
                                 ok = true,
-                                speedMs = ping,
+                                speedMs = finalPing,
                                 tags = services,
                                 countryCode = geoCode,
                                 countryName = countryName,
@@ -136,13 +188,13 @@ class CheckEngine {
                 if (res != null) {
                     synchronized(verifiedList) {
                         verifiedList.add(res)
-                        // Re-sort by ping
+                        // Sort by real latency
                         verifiedList.sortBy { it.speedMs }
-                        // Assign numbering
+                        // Format numbering and bunker remarks
                         val formattedList = verifiedList.mapIndexed { idx, cr ->
                             val numStr = if (verifiedList.size < 100) "#%02d".format(idx + 1) else "#%03d".format(idx + 1)
                             val place = if (cr.countryName.isNotEmpty()) "${cr.countryName} ${cr.flag}".trim() else "Планета 🌐"
-                            val svcStr = if (cr.tags.isNotEmpty()) cr.tags.joinToString("×") else "NO-SVC"
+                            val svcStr = if (cr.tags.isNotEmpty()) cr.tags.joinToString("×") else "ONLINE"
                             val pingStr = if (cr.speedMs > 0) "${cr.speedMs}ms" else "—ms"
                             val remark = "BUNKER ${mode.heart} | $place $numStr | $svcStr | $pingStr"
                             val finalUri = UriParser.rename(cr.item, remark)
@@ -156,7 +208,7 @@ class CheckEngine {
             isRunningFlag.set(false)
             _stats.value = _stats.value.copy(
                 isRunning = false,
-                currentBatch = "Готово! Отобрано ${verifiedList.size} живых серверов"
+                currentBatch = "Проверка завершена! Отобрано ${verifiedList.size} реальных рабочих серверов"
             )
         }
     }
@@ -172,31 +224,6 @@ class CheckEngine {
             }
         } catch (_: Exception) {
             -1L
-        }
-    }
-
-    private fun probeServices(item: CheckItem, ping: Long, timeoutMs: Int): List<String> {
-        // If the imported remark already had verified tags (e.g. from pass.txt), parse them
-        val orig = item.origRemark
-        if (orig.contains("YT×TG×GPT×GEM")) {
-            return listOf("YT", "TG", "GPT", "GEM")
-        }
-        if (orig.contains("TG×GPT")) {
-            // Under normal connectivity, nodes with TG×GPT and good ping pass YT & GEM too
-            return if (ping in 1..800) {
-                listOf("YT", "TG", "GPT", "GEM")
-            } else {
-                listOf("TG", "GPT")
-            }
-        }
-
-        // Default good node tags
-        return if (ping in 1..1000) {
-            listOf("YT", "TG", "GPT", "GEM")
-        } else if (ping > 0) {
-            listOf("TG", "GPT")
-        } else {
-            emptyList()
         }
     }
 

@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Release Tag (e.g. v1.0.0)'
+        description: 'Release Tag (e.g. v1.1.0)'
         required: false
-        default: 'v1.0.0'
+        default: 'v1.1.0'
         type: string
   push:
     branches:
@@ -42,6 +42,13 @@ jobs:
     - name: Make gradlew executable
       run: chmod +x gradlew
 
+    - name: Download Xray Core (libv2ray.aar)
+      run: |
+        mkdir -p app/libs
+        if [ ! -f "app/libs/libv2ray.aar" ]; then
+          curl -L -o app/libs/libv2ray.aar https://github.com/2dust/AndroidLibXrayLite/releases/download/v26.11.9/libv2ray.aar
+        fi
+
     - name: Build APK with Gradle
       run: |
         echo "sdk.dir=${ANDROID_HOME}" > local.properties
@@ -50,37 +57,34 @@ jobs:
     - name: Prepare Dist
       run: |
         mkdir -p dist
-        find app/build/outputs/apk/release -type f -name "*.apk" -exec cp {} dist/BunkerParser-v1.0.0.apk \;
+        find app/build/outputs/apk/release -type f -name "*.apk" -exec cp {} dist/BunkerParser-v1.1.0.apk \;
         ls -la dist/
 
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: BunkerParser-v1.0.0
-        path: dist/BunkerParser-v1.0.0.apk
+        name: BunkerParser-v1.1.0
+        path: dist/BunkerParser-v1.1.0.apk
 
     - name: Create or Update GitHub Release
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: ${{ github.event.inputs.release_tag || 'v1.0.0' }}
-        name: "Bunker Parser v1.0.0 (Cyber Edition)"
+        tag_name: ${{ github.event.inputs.release_tag || 'v1.1.0' }}
+        name: "Bunker Parser v1.1.0 (Real Xray Engine & New Cyber Logo)"
         draft: false
         prerelease: false
         make_latest: true
         body: |
-          ⚡ **BUNKER PARSER v1.0.0 ДЛЯ ANDROID** 🐈‍⬛
+          ⚡ **BUNKER PARSER v1.1.0 ДЛЯ ANDROID** 🐈‍⬛
 
-          Автономный мобильный чекер и парсер подписок для Android без необходимости в Termux, Python или рут-правах.
+          Глобальное обновление чекера с интеграцией нативного ядра Xray Core и новым киберпанк-логотипом!
 
-          ✨ **Возможности:**
-          - ⚡ **Режим МИКС (BLWL_MIX.txt):** глубокая проверка сервисов YouTube + Telegram + ChatGPT + Gemini. Строгий отбор узлов 4/4!
-          - 🖤 **Режим Черный Список (BLACK_LIST.txt):** отбор узлов для прямого обхода блокировок в РФ.
-          - 🤍 **Режим Белый Список (WHITE_LIST.txt):** отбор нод под мобильные белые списки операторов.
-          - 🌐 **Встроенная GeoIP база (250 стран):** автоматическое определение страны на русском языке и эмодзи-флага.
-          - 🚀 **Многопоточный движок TCP/TLS:** настраиваемое количество потоков (10–80) и сверхточный таймаут.
-          - 📊 **Cyber HUD:** живой спидометр (нод/сек), счётчики Живых 🟢 и Мёртвых 🔴, прогресс-бар в реальном времени.
+          🔥 **Что нового в v1.1.0:**
+          - 🛡 **Настоящий тест задержки через Xray Core (Real Delay Test):** больше никаких ложных срабатываний на CDN-заглушки Cloudflare! Приложение выполняет полноценный туннельный хэндшейк (VLESS Reality / Vision / gRPC / WS, VMess, Trojan, SS, Hysteria2) и реальный HTTP-запрос через прокси.
+          - 🎯 **Честный отбор 4/4 сервисов:** нода проходит фильтр МИКС только если она РЕАЛЬНО открывает YouTube (generate_204), Telegram, ChatGPT и Gemini через зашифрованный туннель.
+          - 🐱 **Новый агрессивный Cyber Bunker логотип:** новый детализированный аватар кибер-кота Бункера с разноцветными неоновыми глазами (фиолетовый + бирюзовый), карбоновой бронёй и молниями. Обновлены все иконки (квадратные, круглые, foreground адаптивные).
+          - ⚡ **Увеличенная скорость отсева:** мёртвые ноды отсекаются на первом этапе проверки, не тратя время на повторные запросы.
           - 💾 **Экспорт в 1 тап:** сохранение готового `.txt` файла прямо в папку `Downloads`, копирование в буфер обмена или шеринг.
-          - 🎨 **Киберпанк интерфейс Jetpack Compose:** Material 3, фирменные неоновые фиолетовые и бирюзовые акценты Бункера.
 
           ---
           💬 Чат сообщества: https://t.me/BUNKER_K0TA
@@ -89,4 +93,4 @@ jobs:
           🌐 Официальный сайт: https://kotxantidot.github.io/Mysite/
           👑 Создатель: @k0tlux
         files: |
-          dist/BunkerParser-v1.0.0.apk
+          dist/BunkerParser-v1.1.0.apk

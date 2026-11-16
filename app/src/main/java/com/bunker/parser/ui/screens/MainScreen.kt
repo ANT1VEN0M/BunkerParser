@@ -5,9 +5,12 @@ import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import com.bunker.parser.R
+import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -119,37 +122,48 @@ fun MainScreen(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Column {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = "BUNKER PARSER",
-                        color = TextPrimary,
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Black,
-                        letterSpacing = 1.5.sp,
-                        fontFamily = FontFamily.Monospace
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(4.dp))
-                            .background(NeonPurple)
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Image(
+                    painter = painterResource(id = R.mipmap.ic_launcher_round),
+                    contentDescription = "Bunker Cat Logo",
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .border(1.5.dp, NeonPurple, CircleShape)
+                )
+                Spacer(modifier = Modifier.width(10.dp))
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(
-                            text = "PRO",
-                            color = BunkerBg,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
+                            text = "BUNKER PARSER",
+                            color = TextPrimary,
+                            fontSize = 19.sp,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 1.2.sp,
                             fontFamily = FontFamily.Monospace
                         )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(4.dp))
+                                .background(NeonPurple)
+                                .padding(horizontal = 6.dp, vertical = 2.dp)
+                        ) {
+                            Text(
+                                text = "v1.1",
+                                color = BunkerBg,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
                     }
+                    Text(
+                        text = "Автономный Xray Core чекер",
+                        color = TextMuted,
+                        fontSize = 11.sp
+                    )
                 }
-                Text(
-                    text = "Автономный чекер & парсер подписок",
-                    color = TextMuted,
-                    fontSize = 11.sp
-                )
             }
 
             IconButton(
