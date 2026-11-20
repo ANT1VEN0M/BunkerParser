@@ -14,6 +14,7 @@ import androidx.lifecycle.viewModelScope
 import com.bunker.parser.core.CheckEngine
 import com.bunker.parser.core.CoreNativeManager
 import com.bunker.parser.core.UriParser
+import com.bunker.parser.model.BunkerCloudFeed
 import com.bunker.parser.model.CheckItem
 import com.bunker.parser.model.CheckResult
 import com.bunker.parser.model.CheckerStats
@@ -224,6 +225,59 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 }
             } catch (e: Exception) {
                 _uiEvents.emit("Ошибка загрузки: ${e.localizedMessage ?: e.message}")
+            }
+        }
+    }
+
+    fun loadFromCloud(feed: BunkerCloudFeed) {
+        viewModelScope.launch(Dispatchers.IO) {
+            _uiEvents.emit("☁️ Загрузка из Облака Бункера: ${feed.title}...")
+            try {
+                val client = okhttp3.OkHttpClient.Builder()
+                    .connectTimeout(12, java.util.concurrent.TimeUnit.SECONDS)
+                    .readTimeout(15, java.util.concurrent.TimeUnit.SECONDS)
+                    .followRedirects(true)
+                    .followSslRedirects(true)
+                    .build()
+
+                var body = ""
+                // Try primary jsDelivr CDN, then GitHub Pages mirror
+                for (targetUrl in listOf(feed.url, feed.mirrorUrl)) {
+                    try {
+                        val request = okhttp3.Request.Builder()
+                            .url(targetUrl)
+                            .header("User-Agent", "BunkerParser/1.3.0 (Android; CloudEngine)")
+                            .header("Accept", "*/*")
+                            .build()
+
+                        client.newCall(request).execute().use { response ->
+                            if (response.isSuccessful) {
+                                val text = response.body?.string().orEmpty()
+                                if (text.isNotBlank()) {
+                                    body = text
+                                }
+                            }
+                        }
+                        if (body.isNotBlank()) break
+                    } catch (_: Exception) {
+                        // continue to mirror
+                    }
+                }
+
+                if (body.isBlank()) {
+                    _uiEvents.emit("❌ Не удалось загрузить [${feed.title}] из облака")
+                    return@launch
+                }
+
+                val statsResult = UriParser.extractWithStats(body, deduplicate = true)
+                _parsedItems.value = statsResult.items
+                if (statsResult.duplicatesRemoved > 0) {
+                    _uiEvents.emit("☁️ Облако [${feed.title}]: ${statsResult.items.size} нод (удалено ${statsResult.duplicatesRemoved} дублей)")
+                } else {
+                    _uiEvents.emit("☁️ Облако [${feed.title}]: ${statsResult.items.size} живых нод")
+                }
+            } catch (e: Exception) {
+                _uiEvents.emit("Ошибка облака: ${e.localizedMessage ?: e.message}")
             }
         }
     }

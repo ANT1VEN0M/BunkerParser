@@ -11,6 +11,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import com.bunker.parser.R
+import com.bunker.parser.model.BunkerCloudFeed
 import androidx.compose.ui.res.painterResource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -221,7 +222,7 @@ fun MainScreen(
                                         .padding(horizontal = 6.dp, vertical = 2.dp)
                                 ) {
                                     Text(
-                                        text = "v1.2.9",
+                                        text = "v1.3.0",
                                         color = Color.White,
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold,
@@ -648,6 +649,112 @@ fun MainScreen(
                                 inactiveTrackColor = BunkerSurfaceVariant
                             )
                         )
+                    }
+                }
+            }
+
+            // Item 3.5: Bunker Cloud Sync Card (Instant 1-Click Feeds from Auto-Engine)
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF13090B)),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        Brush.horizontalGradient(listOf(Color(0xFFDC2626), Color(0xFF550E13)))
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text("☁️", fontSize = 13.sp)
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    "ОБЛАКО БУНКЕРА",
+                                    color = Color.White,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 0.5.sp
+                                )
+                            }
+                            Text(
+                                "СВЕЖИЕ СЕРВЕРЫ",
+                                color = Color(0xFFEF4444),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            "Загрузка проверенных рабочих нод из автопилота в 1 клик:",
+                            color = Color(0xFFA3A3A3),
+                            fontSize = 10.sp
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        // Row 1: Primary Feeds (Mix, BS, Factory)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            listOf(BunkerCloudFeed.MIX, BunkerCloudFeed.BS, BunkerCloudFeed.FACTORY).forEach { feed ->
+                                OutlinedButton(
+                                    onClick = { viewModel.loadFromCloud(feed) },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(38.dp),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 4.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        containerColor = Color(0xFF1C0E11),
+                                        contentColor = Color.White
+                                    ),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF551A1E))
+                                ) {
+                                    Text(
+                                        "${feed.iconEmoji} ${feed.title}",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(6.dp))
+                        // Row 2: Secondary Feeds (Turbo, TG SOS)
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            listOf(BunkerCloudFeed.TURBO, BunkerCloudFeed.TG_SOS).forEach { feed ->
+                                OutlinedButton(
+                                    onClick = { viewModel.loadFromCloud(feed) },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .height(38.dp),
+                                    shape = RoundedCornerShape(8.dp),
+                                    contentPadding = PaddingValues(horizontal = 4.dp),
+                                    colors = ButtonDefaults.outlinedButtonColors(
+                                        containerColor = Color(0xFF190C0F),
+                                        contentColor = Color.White
+                                    ),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFF441518))
+                                ) {
+                                    Text(
+                                        "${feed.iconEmoji} ${feed.title} (${feed.subtitle})",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
