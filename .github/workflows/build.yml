@@ -4,9 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: 'Release Tag (e.g. v1.2.8)'
+        description: 'Release Tag (e.g. v1.2.9)'
         required: false
-        default: 'v1.2.8'
+        default: 'v1.2.9'
         type: string
   push:
     branches:
@@ -57,32 +57,43 @@ jobs:
     - name: Prepare Dist
       run: |
         mkdir -p dist
-        find app/build/outputs/apk/release -type f -name "*.apk" -exec cp {} dist/BunkerParser-v1.2.8.apk \;
+        find app/build/outputs/apk/release -type f -name "*.apk" -exec cp {} dist/BunkerParser-v1.2.9.apk \;
         ls -la dist/
 
     - name: Upload APK Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: BunkerParser-v1.2.8
-        path: dist/BunkerParser-v1.2.8.apk
+        name: BunkerParser-v1.2.9
+        path: dist/BunkerParser-v1.2.9.apk
 
     - name: Create or Update GitHub Release
       uses: softprops/action-gh-release@v2
       with:
-        tag_name: ${{ github.event.inputs.release_tag || 'v1.2.8' }}
-        name: "Bunker Parser v1.2.8 (Factory / BS Mode, Port 53 DNS, URL Subscriptions, Auto-Deduplication)"
+        tag_name: ${{ github.event.inputs.release_tag || 'v1.2.9' }}
+        name: "Bunker Parser v1.2.9 (Minimalist Black-White-Red Edition, New Cat Hacker Logo)"
         draft: false
         prerelease: false
         make_latest: true
         body: |
-          ⚡ **BUNKER PARSER v1.2.8 ДЛЯ ANDROID** 🐈‍⬛
+          🔥 **BUNKER PARSER v1.2.9 ДЛЯ ANDROID** 🐈‍⬛
 
-          Специальный релиз с заточкой под «Режим Завод / Проходные / Белый список (БС)», обнаружением DNS порта 53, загрузкой по прямым ссылкам и авто-дедупликацией нод!
+          Специальный релиз: полный редизайн в минималистичный чёрно-бело-красный тактический стиль, интеграция нового крутого логотипа с котом-хакером и удаление лишних ссылок и визуального шума!
 
-          🛠 **Что нового в v1.2.8:**
-          - 🏭 **Режим «БС (Белый список / Заводы и глушилки)»:**
-            - Теперь проверка в режиме «БС 🤍» тестирует доступность через отечественные сервисы (`ya.ru`, `vk.com`, `telegram.org`) и проверяет внешний выпуск, а не падает на заблокированном YouTube.
-            - Приоритетная сортировка: российские 🇷🇺 и белорусские 🇧🇾 серверы на портах 443 и 53 поднимаются на самый верх готовой подписки `WHITE_LIST.txt`.
+          🛠 **Что нового в v1.2.9:**
+          - 🔴 **Минималистичный чёрно-бело-красный стиль:**
+            - Полный отказ от фиолетовых оттенков — теперь строгая, мощная тёмная эстетика (глубокий обсидиановый чёрный, алый акцент `#DC2626` / `#E50914` и контрастный чистый белый).
+            - Переработаны все карточки, кнопки, переключатели режимов и индикаторы под единый тактический стиль.
+          - 🕶️ **Новый официальный логотип:**
+            - Интегрирован новый арт с котом в худи и очках на фоне серверных стоек и логотипа BUNKER PARSER.
+            - Обновлены иконки приложения для всех разрешений (hdpi, xhdpi, xxhdpi, xxxhdpi).
+          - 🧹 **Очистка от лишнего:**
+            - Убраны лишние ссылки на каналы и чаты из шапки — только суть: чекер, настройки и смена фона.
+            - Заголовки экспортируемых подписок очищены от рекламного мусора.
+          - ⚡ **Вся мощь v1.2.8 сохранена:**
+            - Режим «БС 🤍» под вышки у заводов (тест через ya.ru/vk/tg, приоритет портов 443 и 53, RU/BY серверов).
+            - Детекция DNS-порта 53 и бейдж `53 DNS`.
+            - Загрузка подписок по прямой ссылке `По URL 🌐` с авто-декодированием Base64.
+            - Авто-дедупликация нод при импорте.
           - ⚡ **Детекция и подсветка DNS порта 53:**
             - Серверы на 53 порту (DNS) теперь помечаются неоновым бейджем `53 DNS` и тегом `53/DNS` в конфиге. Это ключевой порт, спасающий на сотовых операторах (МегаФон/Yota/МТС) при глушении.
             - Серверы на стандартном 443 порту получают бейдж `443`.

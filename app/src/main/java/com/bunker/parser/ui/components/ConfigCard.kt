@@ -58,9 +58,9 @@ fun ConfigCard(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(12.dp))
-            .background(BunkerSurface)
-            .border(1.dp, BunkerCardBorder, RoundedCornerShape(12.dp))
+            .clip(RoundedCornerShape(10.dp))
+            .background(Color(0xFF141414))
+            .border(1.dp, Color(0xFF262626), RoundedCornerShape(10.dp))
             .padding(12.dp)
     ) {
         Column {
@@ -152,9 +152,9 @@ fun ConfigCard(
 @Composable
 private fun PortBadge(port: Int) {
     val (label, bg, border, color) = when (port) {
-        53 -> Quad("53 DNS", Color(0xFF0F3A2E), NeonCyan, NeonCyan)
-        443 -> Quad("443", Color(0xFF281347), Color(0xFFA855F7), Color(0xFFA855F7))
-        else -> Quad("$port", BunkerSurfaceVariant, BunkerCardBorder, TextSecondary)
+        53 -> Quad("53 DNS", Color(0xFF2B0A0E), Color(0xFFEF4444), Color(0xFFFF3344))
+        443 -> Quad("443", Color(0xFF1F1F1F), Color(0xFF444444), Color.White)
+        else -> Quad("$port", Color(0xFF1A1A1A), Color(0xFF2C2C2C), TextSecondary)
     }
 
     Box(
@@ -181,12 +181,13 @@ private fun ProtocolBadge(protocol: String) {
     Box(
         modifier = Modifier
             .clip(RoundedCornerShape(4.dp))
-            .background(BunkerSurfaceVariant)
+            .background(Color(0xFF1E1E1E))
+            .border(0.8.dp, Color(0xFF333333), RoundedCornerShape(4.dp))
             .padding(horizontal = 6.dp, vertical = 2.dp)
     ) {
         Text(
             text = protocol,
-            color = NeonCyan,
+            color = Color.White,
             fontSize = 10.sp,
             fontWeight = FontWeight.Bold,
             fontFamily = FontFamily.Monospace
@@ -196,9 +197,9 @@ private fun ProtocolBadge(protocol: String) {
 
 @Composable
 private fun ServiceChip(name: String, passed: Boolean) {
-    val bg = if (passed) NeonGreen.copy(alpha = 0.15f) else BunkerSurfaceVariant
-    val border = if (passed) NeonGreen.copy(alpha = 0.5f) else BunkerCardBorder
-    val textColor = if (passed) NeonGreen else TextMuted
+    val bg = if (passed) Color(0xFF26080B) else Color(0xFF181818)
+    val border = if (passed) Color(0xFFDC2626) else Color(0xFF282828)
+    val textColor = if (passed) Color(0xFFFF4040) else Color(0xFF666666)
 
     Box(
         modifier = Modifier

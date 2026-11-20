@@ -93,10 +93,10 @@ fun AnalyticsBlock(
             }
         }
         listOf(
-            Triple("4/4 (YT×TG×GPT×GEM)", count4, NeonPurple),
-            Triple("3 сервиса (Трио)", count3, NeonCyan),
-            Triple("2 сервиса (Связки)", count2, NeonAmber),
-            Triple("1 сервис", count1, NeonGreen)
+            Triple("4/4 (YT×TG×GPT×GEM)", count4, Color(0xFFEF4444)),
+            Triple("3 сервиса (Трио)", count3, Color.White),
+            Triple("2 сервиса (Связки)", count2, Color(0xFFD4D4D4)),
+            Triple("1 сервис", count1, Color(0xFF737373))
         ).filter { it.second > 0 }
     }
 
@@ -123,9 +123,9 @@ fun AnalyticsBlock(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(BunkerSurface)
-            .border(1.dp, BunkerCardBorder, RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFF141414))
+            .border(1.dp, Color(0xFF262626), RoundedCornerShape(12.dp))
             .padding(14.dp)
     ) {
         Column {
@@ -138,7 +138,7 @@ fun AnalyticsBlock(
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         text = "АНАЛИТИКА СЕТИ",
-                        color = NeonCyan,
+                        color = Color.White,
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.2.sp,
@@ -147,7 +147,7 @@ fun AnalyticsBlock(
                 }
                 Text(
                     text = "Рабочих: ${results.size}",
-                    color = NeonGreen,
+                    color = Color(0xFFEF4444),
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Monospace
@@ -179,7 +179,7 @@ fun AnalyticsBlock(
                 }
 
                 HorizontalDivider(
-                    color = BunkerCardBorder,
+                    color = Color(0xFF262626),
                     modifier = Modifier.padding(vertical = 10.dp)
                 )
             }
@@ -199,11 +199,11 @@ fun AnalyticsBlock(
             ) {
                 protocolStats.forEach { (proto, count) ->
                     val color = when (proto) {
-                        "VLESS" -> NeonPurple
-                        "VMESS" -> NeonCyan
-                        "TROJAN" -> NeonAmber
-                        "SS", "SHADOWSOCKS" -> NeonGreen
-                        "HYSTERIA2", "HY2" -> NeonRed
+                        "VLESS" -> Color(0xFFEF4444)
+                        "VMESS" -> Color.White
+                        "TROJAN" -> Color(0xFFD4D4D4)
+                        "SS", "SHADOWSOCKS" -> Color(0xFF22C55E)
+                        "HYSTERIA2", "HY2" -> Color(0xFFFF3344)
                         else -> TextPrimary
                     }
                     ProtocolChip(proto = proto, count = count, color = color)
@@ -211,7 +211,7 @@ fun AnalyticsBlock(
             }
 
             HorizontalDivider(
-                color = BunkerCardBorder,
+                color = Color(0xFF262626),
                 modifier = Modifier.padding(vertical = 10.dp)
             )
 

@@ -73,11 +73,11 @@ fun CyberHud(
     )
 
     val (statusText, statusColor) = when {
-        stats.isPaused -> "ПАУЗА" to NeonAmber
-        stats.isRunning -> "СКАНИРОВАНИЕ СЕТИ" to NeonCyan
-        stats.total > 0 && stats.processed >= stats.total -> "ЗАВЕРШЕНО" to NeonGreen
-        stats.total > 0 && !stats.isRunning -> "ОСТАНОВЛЕНО" to NeonAmber
-        else -> "ГОТОВ К РАБОТЕ" to NeonPurple
+        stats.isPaused -> "ПАУЗА" to Color(0xFFF59E0B)
+        stats.isRunning -> "СКАНИРОВАНИЕ" to Color(0xFFEF4444)
+        stats.total > 0 && stats.processed >= stats.total -> "ЗАВЕРШЕНО" to Color(0xFF22C55E)
+        stats.total > 0 && !stats.isRunning -> "ОСТАНОВЛЕНО" to Color(0xFFF59E0B)
+        else -> "ГОТОВ К РАБОТЕ" to Color(0xFFEF4444)
     }
 
     val progressPercent = if (stats.total > 0) (stats.processed.toFloat() / stats.total.toFloat()).coerceIn(0f, 1f) else 0f
@@ -85,17 +85,12 @@ fun CyberHud(
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .clip(RoundedCornerShape(16.dp))
-            .background(Color(0xFF130D24))
+            .clip(RoundedCornerShape(12.dp))
+            .background(Color(0xFF141414))
             .border(
-                1.2.dp,
-                Brush.verticalGradient(
-                    listOf(
-                        Color(0xFF7E22CE).copy(alpha = 0.7f),
-                        Color(0xFF3B1A66).copy(alpha = 0.5f)
-                    )
-                ),
-                RoundedCornerShape(16.dp)
+                1.dp,
+                Color(0xFF282828),
+                RoundedCornerShape(12.dp)
             )
             .padding(14.dp)
     ) {
@@ -128,7 +123,7 @@ fun CyberHud(
                     if (stats.isRunning && stats.ratePerSec > 0) {
                         Text(
                             text = String.format("%.1f nod/s", stats.ratePerSec),
-                            color = NeonCyan,
+                            color = Color.White,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.SemiBold,
                             fontFamily = FontFamily.Monospace,
@@ -146,11 +141,11 @@ fun CyberHud(
             }
 
             HorizontalDivider(
-                color = BunkerCardBorder.copy(alpha = 0.5f),
+                color = Color(0xFF282828),
                 modifier = Modifier.padding(vertical = 10.dp)
             )
 
-            // 4 Metrics Grid (Matching User Mockup)
+            // 4 Metrics Grid
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
@@ -159,28 +154,28 @@ fun CyberHud(
                     label = "ВСЕГО",
                     value = if (stats.total > 0) "${stats.processed}" else "0",
                     icon = Icons.Default.Storage,
-                    iconColor = NeonPurple,
+                    iconColor = Color.White,
                     valueColor = TextPrimary
                 )
                 HudMetricWithIcon(
                     label = "ЖИВЫЕ",
                     value = stats.alive.toString(),
                     icon = Icons.Default.CheckCircle,
-                    iconColor = NeonGreen,
+                    iconColor = Color(0xFF22C55E),
                     valueColor = TextPrimary
                 )
                 HudMetricWithIcon(
                     label = "МЁРТВЫЕ",
                     value = stats.dead.toString(),
                     icon = Icons.Default.Cancel,
-                    iconColor = NeonRed,
+                    iconColor = Color(0xFFEF4444),
                     valueColor = TextPrimary
                 )
                 HudMetricWithIcon(
                     label = "ПРОГРЕСС",
                     value = "${(progressPercent * 100).toInt()}%",
                     icon = Icons.Default.DataUsage,
-                    iconColor = NeonCyan,
+                    iconColor = Color(0xFFDC2626),
                     valueColor = TextPrimary
                 )
             }
@@ -193,7 +188,7 @@ fun CyberHud(
                     .fillMaxWidth()
                     .height(6.dp)
                     .clip(RoundedCornerShape(3.dp))
-                    .background(Color(0xFF231840))
+                    .background(Color(0xFF222222))
             ) {
                 Box(
                     modifier = Modifier
@@ -202,9 +197,9 @@ fun CyberHud(
                         .background(
                             Brush.horizontalGradient(
                                 listOf(
-                                    Color(0xFFA855F7),
-                                    Color(0xFFEC4899),
-                                    Color(0xFF06B6D4)
+                                    Color(0xFFDC2626),
+                                    Color(0xFFEF4444),
+                                    Color.White
                                 )
                             )
                         )

@@ -35,11 +35,7 @@ enum class ParseMode(
     fun formatSubscriptionHeader(): List<String> = listOf(
         "#profile-title: $headerTitle",
         "#profile-update-interval: 1",
-        "#support-url: https://t.me/BUNKER_KOTA",
-        "#profile-web-page-url: https://t.me/BUNKER_KOTA",
-        "# 🐈‍⬛ Бункер | VPN • Proxy TG",
-        "# 📢 Наш Telegram: https://t.me/BUNKER_KOTA",
-        "# 💬 Чат: https://t.me/BUNKER_K0TA",
+        "# 🐈‍⬛ BUNKER PARSER",
         ""
     )
 }

@@ -6,19 +6,20 @@ import androidx.compose.material3.Typography
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.SideEffect
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalView
 import androidx.core.view.WindowCompat
 
 private val DarkColorScheme = darkColorScheme(
-    primary = NeonPurple,
-    onPrimary = BunkerBg,
-    primaryContainer = NeonPurpleDark,
-    onPrimaryContainer = TextPrimary,
-    secondary = NeonCyan,
-    onSecondary = BunkerBg,
+    primary = RedPrimary,
+    onPrimary = Color.White,
+    primaryContainer = RedDark,
+    onPrimaryContainer = Color.White,
+    secondary = Color.White,
+    onSecondary = Color.Black,
     secondaryContainer = BunkerSurfaceVariant,
-    onSecondaryContainer = NeonCyan,
+    onSecondaryContainer = Color.White,
     tertiary = NeonGreen,
     background = BunkerBg,
     onBackground = TextPrimary,
@@ -26,8 +27,8 @@ private val DarkColorScheme = darkColorScheme(
     onSurface = TextPrimary,
     surfaceVariant = BunkerSurfaceVariant,
     onSurfaceVariant = TextSecondary,
-    error = NeonRed,
-    onError = TextPrimary
+    error = RedPrimary,
+    onError = Color.White
 )
 
 @Composable
