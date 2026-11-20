@@ -90,17 +90,37 @@ class CheckEngine {
         mode: ParseMode,
         minServices: Int = 1,
         workers: Int = 32,
-        timeoutSec: Float = 2.5f
+        timeoutSec: Float = 2.5f,
+        onlyFactoryPorts: Boolean = false
     ) = withContext(Dispatchers.IO) {
         if (items.isEmpty()) return@withContext
         stop()
+
+        val allowedPorts = setOf(443, 53, 80, 8443)
+        val targetItems = if (onlyFactoryPorts) {
+            items.filter { it.port in allowedPorts }
+        } else {
+            items
+        }
+
+        if (targetItems.isEmpty()) {
+            _stats.value = CheckerStats(
+                total = items.size,
+                processed = 0,
+                alive = 0,
+                dead = items.size,
+                isRunning = false,
+                currentBatch = "Отсеяно: ни один узел не использует порты 443 или 53"
+            )
+            return@withContext
+        }
 
         isRunningFlag.set(true)
         isPausedFlag.set(false)
         val verifiedList = mutableListOf<CheckResult>()
         _results.value = emptyList()
 
-        val total = items.size
+        val total = targetItems.size
         val processedCounter = AtomicInteger(0)
         val aliveCounter = AtomicInteger(0)
         val deadCounter = AtomicInteger(0)
@@ -116,7 +136,7 @@ class CheckEngine {
             ratePerSec = 0f,
             isRunning = true,
             isPaused = false,
-            currentBatch = "Старт Turbo проверки Xray Core ($workerPoolSize потоков)..."
+            currentBatch = "Старт Turbo проверки Xray Core ($workerPoolSize потоков, режим ${mode.title})..."
         )
 
         engineJob = launch {
@@ -126,7 +146,7 @@ class CheckEngine {
 
             // Producer: sends items into channel sequentially
             launch(Dispatchers.IO) {
-                for (item in items) {
+                for (item in targetItems) {
                     if (!isRunningFlag.get()) break
                     channel.send(item)
                 }
@@ -157,67 +177,68 @@ class CheckEngine {
                             if (preTcp > 0) {
                                 val pings = mutableListOf<Long>()
 
-                                // ── ШАГ 2: Быстрый тест выхода в сеть через YouTube 204 ──
-                                val ytPing = CoreNativeManager.measureOutboundDelay(
-                                    configJson,
-                                    "https://www.youtube.com/generate_204"
-                                )
+                                if (mode == ParseMode.BS) {
+                                    // ── БС РЕЖИМ (Белый список / Заводы): проверка через внутренние сервисы RU + TG + Выход за рубеж ──
+                                    val yaPing = CoreNativeManager.measureOutboundDelay(configJson, "https://ya.ru/")
+                                    if (yaPing > 0) {
+                                        isAlive = true
+                                        services.add("YA")
+                                        pings.add(yaPing)
+                                    }
 
-                                if (ytPing > 0) {
-                                    isAlive = true
-                                    services.add("YT")
-                                    pings.add(ytPing)
-
-                                    // Параллельный запуск оставшихся сервисов (TG, GPT, GEM)
                                     coroutineScope {
+                                        val vkDef = async(Dispatchers.IO) {
+                                            CoreNativeManager.measureOutboundDelay(configJson, "https://vk.com/robots.txt")
+                                        }
                                         val tgDef = async(Dispatchers.IO) {
                                             CoreNativeManager.measureOutboundDelay(configJson, "https://telegram.org/")
                                         }
-                                        val gptDef = async(Dispatchers.IO) {
-                                            CoreNativeManager.measureOutboundDelay(configJson, "https://chatgpt.com/robots.txt")
-                                        }
-                                        val gemDef = async(Dispatchers.IO) {
-                                            CoreNativeManager.measureOutboundDelay(configJson, "https://gemini.google.com/robots.txt")
-                                        }
-
-                                        val tgPing = tgDef.await()
-                                        if (tgPing > 0) {
-                                            services.add("TG")
-                                            pings.add(tgPing)
-                                        }
-                                        val gptPing = gptDef.await()
-                                        if (gptPing > 0) {
-                                            services.add("GPT")
-                                            pings.add(gptPing)
-                                        }
-                                        val gemPing = gemDef.await()
-                                        if (gemPing > 0) {
-                                            services.add("GEM")
-                                            pings.add(gemPing)
-                                        }
-                                    }
-                                    finalPing = pings.average().toLong()
-                                } else {
-                                    // YouTube не ответил. Проверяем Cloudflare 204 и Telegram параллельно!
-                                    coroutineScope {
-                                        val cfDef = async(Dispatchers.IO) {
+                                        val intlDef = async(Dispatchers.IO) {
                                             CoreNativeManager.measureOutboundDelay(configJson, "https://cp.cloudflare.com/generate_204")
                                         }
-                                        val tgDef = async(Dispatchers.IO) {
-                                            CoreNativeManager.measureOutboundDelay(configJson, "https://telegram.org/")
+
+                                        val vkPing = vkDef.await()
+                                        if (vkPing > 0) {
+                                            isAlive = true
+                                            services.add("VK")
+                                            pings.add(vkPing)
                                         }
 
-                                        val cfPing = cfDef.await()
                                         val tgPing = tgDef.await()
-
                                         if (tgPing > 0) {
                                             isAlive = true
                                             services.add("TG")
                                             pings.add(tgPing)
                                         }
 
-                                        if (cfPing > 0) {
+                                        val intlPing = intlDef.await()
+                                        if (intlPing > 0) {
                                             isAlive = true
+                                            services.add("INTL")
+                                            pings.add(intlPing)
+                                        }
+                                    }
+
+                                    if (pings.isNotEmpty()) {
+                                        finalPing = pings.average().toLong()
+                                    }
+                                } else {
+                                    // ── МИКС / ЧС РЕЖИМ: Проверка через YouTube + TG + GPT + GEM ──
+                                    val ytPing = CoreNativeManager.measureOutboundDelay(
+                                        configJson,
+                                        "https://www.youtube.com/generate_204"
+                                    )
+
+                                    if (ytPing > 0) {
+                                        isAlive = true
+                                        services.add("YT")
+                                        pings.add(ytPing)
+
+                                        // Параллельный запуск оставшихся сервисов (TG, GPT, GEM)
+                                        coroutineScope {
+                                            val tgDef = async(Dispatchers.IO) {
+                                                CoreNativeManager.measureOutboundDelay(configJson, "https://telegram.org/")
+                                            }
                                             val gptDef = async(Dispatchers.IO) {
                                                 CoreNativeManager.measureOutboundDelay(configJson, "https://chatgpt.com/robots.txt")
                                             }
@@ -225,6 +246,11 @@ class CheckEngine {
                                                 CoreNativeManager.measureOutboundDelay(configJson, "https://gemini.google.com/robots.txt")
                                             }
 
+                                            val tgPing = tgDef.await()
+                                            if (tgPing > 0) {
+                                                services.add("TG")
+                                                pings.add(tgPing)
+                                            }
                                             val gptPing = gptDef.await()
                                             if (gptPing > 0) {
                                                 services.add("GPT")
@@ -235,15 +261,56 @@ class CheckEngine {
                                                 services.add("GEM")
                                                 pings.add(gemPing)
                                             }
-
-                                            if (services.isEmpty()) {
-                                                services.add("TUNNEL")
-                                                pings.add(cfPing)
-                                            }
                                         }
+                                        finalPing = pings.average().toLong()
+                                    } else {
+                                        // YouTube не ответил. Проверяем Cloudflare 204 и Telegram параллельно!
+                                        coroutineScope {
+                                            val cfDef = async(Dispatchers.IO) {
+                                                CoreNativeManager.measureOutboundDelay(configJson, "https://cp.cloudflare.com/generate_204")
+                                            }
+                                            val tgDef = async(Dispatchers.IO) {
+                                                CoreNativeManager.measureOutboundDelay(configJson, "https://telegram.org/")
+                                            }
 
-                                        if (pings.isNotEmpty()) {
-                                            finalPing = pings.average().toLong()
+                                            val cfPing = cfDef.await()
+                                            val tgPing = tgDef.await()
+
+                                            if (tgPing > 0) {
+                                                isAlive = true
+                                                services.add("TG")
+                                                pings.add(tgPing)
+                                            }
+
+                                            if (cfPing > 0) {
+                                                isAlive = true
+                                                val gptDef = async(Dispatchers.IO) {
+                                                    CoreNativeManager.measureOutboundDelay(configJson, "https://chatgpt.com/robots.txt")
+                                                }
+                                                val gemDef = async(Dispatchers.IO) {
+                                                    CoreNativeManager.measureOutboundDelay(configJson, "https://gemini.google.com/robots.txt")
+                                                }
+
+                                                val gptPing = gptDef.await()
+                                                if (gptPing > 0) {
+                                                    services.add("GPT")
+                                                    pings.add(gptPing)
+                                                }
+                                                val gemPing = gemDef.await()
+                                                if (gemPing > 0) {
+                                                    services.add("GEM")
+                                                    pings.add(gemPing)
+                                                }
+
+                                                if (services.isEmpty()) {
+                                                    services.add("TUNNEL")
+                                                    pings.add(cfPing)
+                                                }
+                                            }
+
+                                            if (pings.isNotEmpty()) {
+                                                finalPing = pings.average().toLong()
+                                            }
                                         }
                                     }
                                 }
@@ -307,10 +374,19 @@ class CheckEngine {
                         if (now - lastUiUpdateMs > 1000) {
                             lastUiUpdateMs = now
                             val snapshot = synchronized(listLock) {
-                                verifiedList.sortedWith(
-                                    compareByDescending<CheckResult> { it.tags.size }
-                                        .thenBy { if (it.speedMs > 0) it.speedMs else Long.MAX_VALUE }
-                                )
+                                if (mode == ParseMode.BS) {
+                                    verifiedList.sortedWith(
+                                        compareByDescending<CheckResult> { it.countryCode in setOf("RU", "BY") }
+                                            .thenByDescending { it.item.port == 53 || it.item.port == 443 }
+                                            .thenByDescending { it.tags.size }
+                                            .thenBy { if (it.speedMs > 0) it.speedMs else Long.MAX_VALUE }
+                                    )
+                                } else {
+                                    verifiedList.sortedWith(
+                                        compareByDescending<CheckResult> { it.tags.size }
+                                            .thenBy { if (it.speedMs > 0) it.speedMs else Long.MAX_VALUE }
+                                    )
+                                }
                             }
                             _results.value = snapshot
                         }
@@ -339,10 +415,19 @@ class CheckEngine {
         mode: ParseMode
     ) {
         val snapshot = synchronized(listLock) {
-            verifiedList.sortedWith(
-                compareByDescending<CheckResult> { it.tags.size }
-                    .thenBy { if (it.speedMs > 0) it.speedMs else Long.MAX_VALUE }
-            )
+            if (mode == ParseMode.BS) {
+                verifiedList.sortedWith(
+                    compareByDescending<CheckResult> { it.countryCode in setOf("RU", "BY") }
+                        .thenByDescending { it.item.port == 53 || it.item.port == 443 }
+                        .thenByDescending { it.tags.size }
+                        .thenBy { if (it.speedMs > 0) it.speedMs else Long.MAX_VALUE }
+                )
+            } else {
+                verifiedList.sortedWith(
+                    compareByDescending<CheckResult> { it.tags.size }
+                        .thenBy { if (it.speedMs > 0) it.speedMs else Long.MAX_VALUE }
+                )
+            }
         }
 
         val totalAlive = snapshot.size
@@ -357,7 +442,17 @@ class CheckEngine {
             }
             val svcStr = if (cr.tags.isNotEmpty()) cr.tags.joinToString("×") else "ONLINE"
             val pingStr = if (cr.speedMs > 0) "${cr.speedMs}ms" else "—ms"
-            val remark = "BUNKER ${mode.heart} | $place $numStr | $svcStr | $pingStr"
+            val portTag = when (cr.item.port) {
+                53 -> "53/DNS"
+                443 -> "443"
+                else -> "${cr.item.port}"
+            }
+            val remark = if (mode == ParseMode.BS) {
+                "BUNKER 🤍 | $place $numStr | $svcStr | $portTag | $pingStr"
+            } else {
+                val extraPort = if (cr.item.port == 53) " | 53/DNS" else ""
+                "BUNKER ${mode.heart} | $place $numStr | $svcStr$extraPort | $pingStr"
+            }
             val finalUri = UriParser.rename(cr.item, remark)
             cr.copy(finalRemark = remark, finalUri = finalUri)
         }
@@ -383,7 +478,17 @@ class CheckEngine {
                 }
                 val svcStr = if (cr.tags.isNotEmpty()) cr.tags.joinToString("×") else "ONLINE"
                 val pingStr = if (cr.speedMs > 0) "${cr.speedMs}ms" else "—ms"
-                val remark = "BUNKER ${mode.heart} | $place $numStr | $svcStr | $pingStr"
+                val portTag = when (cr.item.port) {
+                    53 -> "53/DNS"
+                    443 -> "443"
+                    else -> "${cr.item.port}"
+                }
+                val remark = if (mode == ParseMode.BS) {
+                    "BUNKER 🤍 | $place $numStr | $svcStr | $portTag | $pingStr"
+                } else {
+                    val extraPort = if (cr.item.port == 53) " | 53/DNS" else ""
+                    "BUNKER ${mode.heart} | $place $numStr | $svcStr$extraPort | $pingStr"
+                }
                 UriParser.rename(cr.item, remark)
             }
             sb.append(uriToExport).append("\n")

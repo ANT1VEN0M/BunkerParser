@@ -26,8 +26,11 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asSharedFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import java.io.File
 import java.io.FileOutputStream
+import java.util.concurrent.TimeUnit
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -41,6 +44,9 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _strictAll4 = MutableStateFlow(false)
     val strictAll4: StateFlow<Boolean> = _strictAll4.asStateFlow()
+
+    private val _onlyFactoryPorts = MutableStateFlow(false)
+    val onlyFactoryPorts: StateFlow<Boolean> = _onlyFactoryPorts.asStateFlow()
 
     private val _workers = MutableStateFlow(32)
     val workers: StateFlow<Int> = _workers.asStateFlow()
@@ -129,6 +135,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         _minServices.value = if (value) 4 else 1
     }
 
+    fun setOnlyFactoryPorts(enabled: Boolean) {
+        _onlyFactoryPorts.value = enabled
+    }
+
     fun setWorkers(count: Int) {
         _workers.value = count.coerceIn(4, 64)
     }
@@ -138,25 +148,82 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun loadFromText(rawText: String) {
-        val extracted = UriParser.extractItems(rawText)
-        _parsedItems.value = extracted
+        val statsResult = UriParser.extractWithStats(rawText, deduplicate = true)
+        _parsedItems.value = statsResult.items
         viewModelScope.launch {
-            _uiEvents.emit("Загружено конфигов: ${extracted.size}")
+            if (statsResult.duplicatesRemoved > 0) {
+                _uiEvents.emit("Загружено: ${statsResult.items.size} (отсеяно ${statsResult.duplicatesRemoved} дублей)")
+            } else {
+                _uiEvents.emit("Загружено конфигов: ${statsResult.items.size}")
+            }
         }
     }
 
     fun loadFromFileUri(uri: Uri) {
-        viewModelScope.launch {
+        viewModelScope.launch(Dispatchers.IO) {
             try {
                 val context = getApplication<Application>()
                 val content = context.contentResolver.openInputStream(uri)?.use { stream ->
                     stream.bufferedReader().readText()
                 } ?: ""
-                val extracted = UriParser.extractItems(content)
-                _parsedItems.value = extracted
-                _uiEvents.emit("Загружено из файла: ${extracted.size} конфигов")
+                val statsResult = UriParser.extractWithStats(content, deduplicate = true)
+                _parsedItems.value = statsResult.items
+                if (statsResult.duplicatesRemoved > 0) {
+                    _uiEvents.emit("Загружено из файла: ${statsResult.items.size} (отсеяно ${statsResult.duplicatesRemoved} дублей)")
+                } else {
+                    _uiEvents.emit("Загружено из файла: ${statsResult.items.size} конфигов")
+                }
             } catch (e: Exception) {
                 _uiEvents.emit("Ошибка чтения файла: ${e.message}")
+            }
+        }
+    }
+
+    fun loadFromUrl(url: String) {
+        val trimmedUrl = url.trim()
+        if (!trimmedUrl.startsWith("http://", ignoreCase = true) && !trimmedUrl.startsWith("https://", ignoreCase = true)) {
+            viewModelScope.launch {
+                _uiEvents.emit("Ошибка: ссылка должна начинаться с http:// или https://")
+            }
+            return
+        }
+
+        viewModelScope.launch(Dispatchers.IO) {
+            _uiEvents.emit("Загрузка подписки по ссылке 🌐...")
+            try {
+                val client = OkHttpClient.Builder()
+                    .connectTimeout(15, TimeUnit.SECONDS)
+                    .readTimeout(20, TimeUnit.SECONDS)
+                    .followRedirects(true)
+                    .followSslRedirects(true)
+                    .build()
+
+                val request = Request.Builder()
+                    .url(trimmedUrl)
+                    .header("User-Agent", "BunkerParser/1.2.8 (Android; v2rayN)")
+                    .header("Accept", "*/*")
+                    .build()
+
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        _uiEvents.emit("Ошибка сети: код ${response.code}")
+                        return@use
+                    }
+                    val body = response.body?.string().orEmpty()
+                    if (body.isBlank()) {
+                        _uiEvents.emit("Ошибка: пустой ответ от сервера")
+                        return@use
+                    }
+                    val statsResult = UriParser.extractWithStats(body, deduplicate = true)
+                    _parsedItems.value = statsResult.items
+                    if (statsResult.duplicatesRemoved > 0) {
+                        _uiEvents.emit("Загружено по ссылке: ${statsResult.items.size} (отсеяно ${statsResult.duplicatesRemoved} дублей)")
+                    } else {
+                        _uiEvents.emit("Загружено по ссылке: ${statsResult.items.size} конфигов")
+                    }
+                }
+            } catch (e: Exception) {
+                _uiEvents.emit("Ошибка загрузки: ${e.localizedMessage ?: e.message}")
             }
         }
     }
@@ -193,7 +260,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 mode = _selectedMode.value,
                 minServices = _minServices.value,
                 workers = _workers.value,
-                timeoutSec = _timeoutSeconds.value
+                timeoutSec = _timeoutSeconds.value,
+                onlyFactoryPorts = _onlyFactoryPorts.value
             )
         }
     }

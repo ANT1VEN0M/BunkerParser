@@ -45,12 +45,15 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material.icons.filled.Wallpaper
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
@@ -104,12 +107,15 @@ fun MainScreen(
     val strictAll4 by viewModel.strictAll4.collectAsState()
     val workers by viewModel.workers.collectAsState()
     val timeoutSec by viewModel.timeoutSeconds.collectAsState()
+    val onlyFactoryPorts by viewModel.onlyFactoryPorts.collectAsState()
     val parsedItems by viewModel.parsedItems.collectAsState()
     val stats by viewModel.stats.collectAsState()
     val results by viewModel.results.collectAsState()
     val customBgPath by viewModel.customBgPath.collectAsState()
 
     var showSettings by remember { mutableStateOf(false) }
+    var showUrlDialog by remember { mutableStateOf(false) }
+    var inputUrlText by remember { mutableStateOf("") }
 
     val customBgBitmap = remember(customBgPath) {
         ImageUtils.loadScaledBitmap(customBgPath)
@@ -213,7 +219,7 @@ fun MainScreen(
                                         .padding(horizontal = 6.dp, vertical = 2.dp)
                                 ) {
                                     Text(
-                                        text = "v1.2.7",
+                                        text = "v1.2.8",
                                         color = Color.White,
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold,
@@ -366,6 +372,53 @@ fun MainScreen(
                 }
             }
 
+            // Item 2.1: Factory / Anti-Jammer Quick Banner (When BS is selected)
+            if (selectedMode == ParseMode.BS) {
+                item {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(Color(0xFF160E2A))
+                            .border(1.dp, if (onlyFactoryPorts) NeonCyan else Color(0xFF381F66), RoundedCornerShape(12.dp))
+                            .padding(horizontal = 12.dp, vertical = 9.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            modifier = Modifier.weight(1f),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(text = "🏭", fontSize = 18.sp)
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Column {
+                                Text(
+                                    text = "Анти-глушилка (Режим Завод / Проходная)",
+                                    color = if (onlyFactoryPorts) NeonCyan else TextPrimary,
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold
+                                )
+                                Text(
+                                    text = "Оставлять только порты 443 и 53 (DNS)",
+                                    color = TextMuted,
+                                    fontSize = 11.sp
+                                )
+                            }
+                        }
+                        Switch(
+                            checked = onlyFactoryPorts,
+                            onCheckedChange = { viewModel.setOnlyFactoryPorts(it) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = BunkerBg,
+                                checkedTrackColor = NeonCyan,
+                                uncheckedThumbColor = TextMuted,
+                                uncheckedTrackColor = BunkerSurfaceVariant
+                            )
+                        )
+                    }
+                }
+            }
+
             // Item 2.5: Filter Services Card (Matching Mockup)
             item {
                 Column(
@@ -405,7 +458,7 @@ fun MainScreen(
                                 1 -> "1+ (Все живые связки) ⌄"
                                 2 -> "2+ (Дуэты и выше) ⌄"
                                 3 -> "3+ (Трио и 4/4) ⌄"
-                                else -> "4/4 (Строгий YT×TG×GPT×GEM) ⌄"
+                                else -> if (selectedMode == ParseMode.BS) "4/4 (Строгий YA×VK×TG×INTL) ⌄" else "4/4 (Строгий YT×TG×GPT×GEM) ⌄"
                             },
                             color = NeonCyan,
                             fontSize = 11.sp,
@@ -562,6 +615,42 @@ fun MainScreen(
                             modifier = Modifier.padding(vertical = 10.dp)
                         )
 
+                        // Factory Ports (443 and 53) Toggle
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = "Фильтр портов 443 и 53 (Завод / Анти-глушилка)",
+                                    color = TextPrimary,
+                                    fontSize = 13.sp,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = "Отсекать порты 9000+, оставляя только 443 (HTTPS) и 53 (DNS) для пробива вышек у заводов",
+                                    color = TextMuted,
+                                    fontSize = 11.sp
+                                )
+                            }
+                            Switch(
+                                checked = onlyFactoryPorts,
+                                onCheckedChange = { viewModel.setOnlyFactoryPorts(it) },
+                                colors = SwitchDefaults.colors(
+                                    checkedThumbColor = BunkerBg,
+                                    checkedTrackColor = NeonCyan,
+                                    uncheckedThumbColor = TextMuted,
+                                    uncheckedTrackColor = BunkerSurfaceVariant
+                                )
+                            )
+                        }
+
+                        HorizontalDivider(
+                            color = BunkerCardBorder,
+                            modifier = Modifier.padding(vertical = 10.dp)
+                        )
+
                         // Workers Slider
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -605,11 +694,11 @@ fun MainScreen(
                 }
             }
 
-            // Item 4: Input buttons row (Matching Mockup with purple & cyan borders)
+            // Item 4: Input buttons row (TXT, Clipboard, URL)
             item {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
                     OutlinedButton(
                         onClick = { filePickerLauncher.launch("text/plain") },
@@ -617,6 +706,7 @@ fun MainScreen(
                             .weight(1f)
                             .height(46.dp),
                         shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(horizontal = 4.dp),
                         colors = ButtonDefaults.outlinedButtonColors(
                             containerColor = Color(0xFF140D26),
                             contentColor = TextPrimary
@@ -627,9 +717,9 @@ fun MainScreen(
                             )
                         )
                     ) {
-                        Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(18.dp), tint = Color(0xFFA855F7))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Выбрать TXT", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        Icon(Icons.Default.FolderOpen, contentDescription = null, modifier = Modifier.size(16.dp), tint = Color(0xFFA855F7))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("TXT", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                     }
 
                     OutlinedButton(
@@ -638,6 +728,7 @@ fun MainScreen(
                             .weight(1f)
                             .height(46.dp),
                         shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(horizontal = 4.dp),
                         colors = ButtonDefaults.outlinedButtonColors(
                             containerColor = Color(0xFF140D26),
                             contentColor = TextPrimary
@@ -648,9 +739,31 @@ fun MainScreen(
                             )
                         )
                     ) {
-                        Icon(Icons.Default.ContentPaste, contentDescription = null, modifier = Modifier.size(18.dp), tint = NeonCyan)
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Из буфера", fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                        Icon(Icons.Default.ContentPaste, contentDescription = null, modifier = Modifier.size(16.dp), tint = NeonCyan)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Буфер", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+                    }
+
+                    OutlinedButton(
+                        onClick = { showUrlDialog = true },
+                        modifier = Modifier
+                            .weight(1.15f)
+                            .height(46.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        contentPadding = PaddingValues(horizontal = 4.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(
+                            containerColor = Color(0xFF140D26),
+                            contentColor = TextPrimary
+                        ),
+                        border = ButtonDefaults.outlinedButtonBorder.copy(
+                            brush = Brush.horizontalGradient(
+                                listOf(Color(0xFF059669), Color(0xFF10B981))
+                            )
+                        )
+                    ) {
+                        Icon(Icons.Default.Public, contentDescription = null, modifier = Modifier.size(16.dp), tint = NeonGreen)
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("По URL 🌐", fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
                     }
                 }
             }
@@ -942,6 +1055,96 @@ fun MainScreen(
                     }
                 }
             }
+        }
+
+        // Dialog for loading subscription by URL
+        if (showUrlDialog) {
+            AlertDialog(
+                onDismissRequest = { showUrlDialog = false },
+                containerColor = Color(0xFF150E28),
+                title = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.Public,
+                            contentDescription = null,
+                            tint = NeonCyan,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "Загрузить по ссылке",
+                            color = TextPrimary,
+                            fontSize = 16.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            text = "Вставьте прямую ссылку на подписку (HTTP/HTTPS). Автоматически поддерживается Base64 и дедупликация нод.",
+                            color = TextMuted,
+                            fontSize = 12.sp
+                        )
+                        OutlinedTextField(
+                            value = inputUrlText,
+                            onValueChange = { inputUrlText = it },
+                            placeholder = { Text("https://example.com/sub/...", color = TextMuted, fontSize = 12.sp) },
+                            singleLine = true,
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedTextColor = TextPrimary,
+                                unfocusedTextColor = TextPrimary,
+                                focusedBorderColor = NeonCyan,
+                                unfocusedBorderColor = Color(0xFF3C2766),
+                                cursorColor = NeonCyan
+                            )
+                        )
+                        OutlinedButton(
+                            onClick = {
+                                val clipboard = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                                val clip = clipboard?.primaryClip?.getItemAt(0)?.text?.toString() ?: ""
+                                if (clip.isNotBlank()) {
+                                    inputUrlText = clip
+                                }
+                            },
+                            shape = RoundedCornerShape(8.dp),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = NeonCyan),
+                            border = ButtonDefaults.outlinedButtonBorder.copy(
+                                brush = Brush.horizontalGradient(listOf(NeonCyan, Color(0xFF0284C7)))
+                            ),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(Icons.Default.ContentPaste, contentDescription = null, modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("Вставить из буфера 📋", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            if (inputUrlText.isNotBlank()) {
+                                viewModel.loadFromUrl(inputUrlText)
+                                showUrlDialog = false
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF7E22CE)),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Text("Загрузить ⚡", fontWeight = FontWeight.Bold, fontSize = 12.sp)
+                    }
+                },
+                dismissButton = {
+                    OutlinedButton(
+                        onClick = { showUrlDialog = false },
+                        shape = RoundedCornerShape(8.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = TextSecondary)
+                    ) {
+                        Text("Отмена", fontSize = 12.sp)
+                    }
+                }
+            )
         }
     }
 }

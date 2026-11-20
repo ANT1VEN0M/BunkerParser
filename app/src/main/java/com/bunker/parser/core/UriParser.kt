@@ -7,12 +7,72 @@ import com.google.gson.JsonObject
 import java.net.URLDecoder
 import java.net.URLEncoder
 
+data class ExtractionResult(
+    val items: List<CheckItem>,
+    val totalFound: Int,
+    val duplicatesRemoved: Int
+)
+
 object UriParser {
     private val gson = Gson()
 
-    fun extractItems(text: String): List<CheckItem> {
-        return text.lines()
+    fun decodeSubscriptionIfBase64(input: String): String {
+        val trimmed = input.trim()
+        if (trimmed.isEmpty()) return ""
+
+        // Check if starts directly with valid scheme or comment
+        if (trimmed.startsWith("vless://", ignoreCase = true) ||
+            trimmed.startsWith("vmess://", ignoreCase = true) ||
+            trimmed.startsWith("trojan://", ignoreCase = true) ||
+            trimmed.startsWith("ss://", ignoreCase = true) ||
+            trimmed.startsWith("hysteria2://", ignoreCase = true) ||
+            trimmed.startsWith("hy2://", ignoreCase = true)
+        ) {
+            return trimmed
+        }
+
+        // Check if first lines already contain URIs
+        val sample = trimmed.lines().take(5).joinToString("\n")
+        if (sample.contains("://")) {
+            return trimmed
+        }
+
+        // Attempt Base64 decode
+        val clean = trimmed.replace("\r", "").replace("\n", "").trim()
+        val decoded = decodeBase64Safe(clean)
+        if (decoded != null && (decoded.contains("://") || decoded.contains("ps="))) {
+            return decoded
+        }
+
+        return trimmed
+    }
+
+    fun extractItems(text: String, deduplicate: Boolean = true): List<CheckItem> {
+        return extractWithStats(text, deduplicate).items
+    }
+
+    fun extractWithStats(text: String, deduplicate: Boolean = true): ExtractionResult {
+        val decoded = decodeSubscriptionIfBase64(text)
+        val rawList = decoded.lines()
             .mapIndexedNotNull { index, line -> parseLine(index + 1, line) }
+
+        if (!deduplicate) {
+            return ExtractionResult(rawList, rawList.size, 0)
+        }
+
+        val seen = HashSet<String>()
+        val result = ArrayList<CheckItem>(rawList.size)
+        var duplicates = 0
+
+        for (item in rawList) {
+            val key = "${item.scheme.lowercase()}://${item.host.lowercase()}:${item.port}"
+            if (seen.add(key)) {
+                result.add(item)
+            } else {
+                duplicates++
+            }
+        }
+        return ExtractionResult(result, rawList.size, duplicates)
     }
 
     fun parseLine(lineNo: Int, rawLine: String): CheckItem? {

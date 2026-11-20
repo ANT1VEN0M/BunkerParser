@@ -22,6 +22,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -81,8 +82,12 @@ fun ConfigCard(
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(6.dp))
                     ProtocolBadge(protocol = result.item.scheme.uppercase())
+                    if (result.item.port == 53 || result.item.port == 443) {
+                        Spacer(modifier = Modifier.width(4.dp))
+                        PortBadge(port = result.item.port)
+                    }
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -122,19 +127,54 @@ fun ConfigCard(
 
             Spacer(modifier = Modifier.height(10.dp))
 
-            // Service chips
+            // Service chips (Smart detection: RU/BS vs Global/MIX)
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                ServiceChip(name = "YT", passed = result.tags.contains("YT"))
-                ServiceChip(name = "TG", passed = result.tags.contains("TG"))
-                ServiceChip(name = "GPT", passed = result.tags.contains("GPT"))
-                ServiceChip(name = "GEM", passed = result.tags.contains("GEM"))
+                val isBsMode = result.tags.any { it in listOf("YA", "VK", "INTL") }
+                if (isBsMode) {
+                    ServiceChip(name = "YA", passed = result.tags.contains("YA"))
+                    ServiceChip(name = "VK", passed = result.tags.contains("VK"))
+                    ServiceChip(name = "TG", passed = result.tags.contains("TG"))
+                    ServiceChip(name = "INTL", passed = result.tags.contains("INTL"))
+                } else {
+                    ServiceChip(name = "YT", passed = result.tags.contains("YT"))
+                    ServiceChip(name = "TG", passed = result.tags.contains("TG"))
+                    ServiceChip(name = "GPT", passed = result.tags.contains("GPT"))
+                    ServiceChip(name = "GEM", passed = result.tags.contains("GEM"))
+                }
             }
         }
     }
 }
+
+@Composable
+private fun PortBadge(port: Int) {
+    val (label, bg, border, color) = when (port) {
+        53 -> Quad("53 DNS", Color(0xFF0F3A2E), NeonCyan, NeonCyan)
+        443 -> Quad("443", Color(0xFF281347), Color(0xFFA855F7), Color(0xFFA855F7))
+        else -> Quad("$port", BunkerSurfaceVariant, BunkerCardBorder, TextSecondary)
+    }
+
+    Box(
+        modifier = Modifier
+            .clip(RoundedCornerShape(4.dp))
+            .background(bg)
+            .border(0.8.dp, border, RoundedCornerShape(4.dp))
+            .padding(horizontal = 5.dp, vertical = 2.dp)
+    ) {
+        Text(
+            text = label,
+            color = color,
+            fontSize = 9.sp,
+            fontWeight = FontWeight.Bold,
+            fontFamily = FontFamily.Monospace
+        )
+    }
+}
+
+private data class Quad<A, B, C, D>(val first: A, val second: B, val third: C, val fourth: D)
 
 @Composable
 private fun ProtocolBadge(protocol: String) {
